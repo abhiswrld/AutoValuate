@@ -75,11 +75,39 @@ def extract_listing_data(listing):
     except ValueError:
         return None  # Skip if the price isn't a valid number
 
-    # 4. Create and return dictionary
+    # 4. Get the miles driven on the vehicle
+    mileage = None
+    meta_div = listing.find("div", class_="meta")
+    if meta_div:
+        for content in meta_div.contents:
+            # bare text nodes come through as NavigableString, not Tag
+            if isinstance(content, str):
+                text = content.strip()
+                if text.lower().endswith("mi"):
+                    has_k = 'k' in text.lower()
+                    clean_text = ''.join(char for char in text if char.isdigit())
+                    
+                    if clean_text:
+                        mileage = int(clean_text)
+                        if has_k:
+                            mileage = mileage * 1000
+                    break
+
+    # 5. Get the location the car is being sold in
+    location_tag = listing.find("span", class_="result-location")
+    if not location_tag:
+        return None
+
+    location = location_tag.text.strip().lower()
+
+
+    # 5. Create and return dictionary
     vehicle_stats = {
         "name": title_text,
         "url": url,
-        "price": price
+        "price": price,
+        "mileage": mileage,
+        "location": location
     }
 
     return vehicle_stats
