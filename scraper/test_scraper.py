@@ -1,5 +1,6 @@
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
+import pandas as pd
 
 def scrape_craigslist():
     with sync_playwright() as p:
@@ -23,16 +24,18 @@ def scrape_craigslist():
         listings = soup.find_all("div", class_="cl-search-result cl-search-view-mode-gallery")
         
         print(f"\nFound {len(listings)} listings! Here are the first 5:")
-        print("-" * 45)
+        print("-" * 41)
+
+        all_cars_data = []
         
-        for listing in listings[:5]:
+        for listing in listings:
             # Catch the dictionary returned by the function
             data = extract_listing_data(listing)
 
             if data:
-                print(data)
+                all_cars_data.append(data)
 
-            print(("-" * 120) + "\n")
+        save_to_csv(all_cars_data, "data/raw_listings.csv")
 
         browser.close()
 
@@ -55,7 +58,7 @@ def extract_listing_data(listing):
     except ValueError:
         return None
 
-    # 4. Create and return dictionary with 
+    # 4. Create and return dictionary with all the information.
     vehicle_stats = {
         "name": title_text,
         "url": url,
@@ -63,6 +66,12 @@ def extract_listing_data(listing):
     }
 
     return vehicle_stats
+
+def save_to_csv(data, filename):
+    df = pd.DataFrame(data)
+    df.to_csv(filename, index=False)
+    print(df.head())
+
 
 if __name__ == "__main__":
     scrape_craigslist()
