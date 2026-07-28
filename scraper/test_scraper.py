@@ -23,21 +23,46 @@ def scrape_craigslist():
         listings = soup.find_all("div", class_="cl-search-result cl-search-view-mode-gallery")
         
         print(f"\nFound {len(listings)} listings! Here are the first 5:")
-        print("-" * 30)
+        print("-" * 45)
         
         for listing in listings[:5]:
-            # 1. Find the title of the car using the specific class "label"
-            title_tag = listing.find("span", class_="label")
-            title_text = title_tag.text.strip().title()
-            print(f"Title: {title_text}")
+            # Catch the dictionary returned by the function
+            data = extract_listing_data(listing)
 
-            # 2. Find the link of the car using the specific class ""
-            link_tag = listing.find("a", href=True)
-            print(f"URL: {link_tag.get('href')}")
-            
-            print("-" * 30)
-            
+            if data:
+                print(data)
+
+            print(("-" * 120) + "\n")
+
         browser.close()
+
+def extract_listing_data(listing):
+    # 1. Find the title of the vehicle
+    title_tag = listing.find("span", class_="label")
+    title_text = title_tag.text.strip().title()
+    
+    # 2. Find the link of the vehicle
+    link_tag = listing.find("a", href=True)
+    url = link_tag.get('href')
+
+    # 3. Find the price of the vehicle
+    price_tag = listing.find("span", class_="priceinfo")
+    price_text = price_tag.text
+    
+    price_text = price_text.replace("$", "").replace(",", "").strip()
+    try:
+        price = int(price_text)
+    except ValueError:
+        return None
+
+    # 4. Create and return dictionary with 
+    vehicle_stats = {
+        "name": title_text,
+        "url": url,
+        "price": price
+    }
+
+    return vehicle_stats
 
 if __name__ == "__main__":
     scrape_craigslist()
