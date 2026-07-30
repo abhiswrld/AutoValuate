@@ -5,9 +5,20 @@ import joblib
 import re
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
+from fastapi.middleware.cors import CORSMiddleware
+import datetime
+import os
 
 # 1. Initialize the App
 app = FastAPI(title="AutoValuate API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allows React app to connect to backend
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 2. Load the ML Artifacts
 print("Loading ML models...")
@@ -32,7 +43,8 @@ manufacturers = [
     'Toyota', 'Honda', 'Ford', 'Chevrolet', 'Chevy', 'Nissan', 'BMW', 'Mercedes', 'Benz', 
     'Audi', 'Lexus', 'Subaru', 'Volkswagen', 'Vw', 'Hyundai', 'Kia', 'Mazda', 'Acura', 'Jeep', 
     'Dodge', 'Ram', 'GMC', 'Cadillac', 'Infiniti', 'Volvo', 'Mitsubishi', 'Mini',
-    'Porsche', 'Tesla', 'Land Rover', 'Jaguar', 'Chrysler', 'Buick', 'Pontiac', 'Saturn'
+    'Porsche', 'Tesla', 'Land Rover', 'Jaguar', 'Chrysler', 'Buick', 'Pontiac', 'Saturn',
+    'Lucid', 'Rivian', 'Polestar', 'Fisker'
 ]
 
 car_models_dict = {
@@ -42,7 +54,7 @@ car_models_dict = {
     'Chevrolet': ['Silverado', 'Equinox', 'Malibu', 'Cruze', 'Tahoe', 'Impala', 'Colorado', 'Camaro', 'Corvette', 'Suburban', 'Traverse', 'Spark', 'Sonic', 'Volt', 'Bolt'],
     'Nissan': ['Altima', 'Sentra', 'Rogue', 'Maxima', 'Murano', 'Pathfinder', 'Versa', 'Frontier', 'Titan', 'Armada', 'Leaf', '350Z', '370Z', 'Juke', 'Kicks'],
     'Bmw': ['328I', '335I', '325I', 'X5', 'X3', 'M3', 'M4', 'M5', '528I', '535I', '750Li', 'X1'],
-    'Mercedes': ['C300', 'E350', 'Ml350', 'Glk350', 'S550', 'Gle', 'Glc', 'Gla', 'Sprinter', 'C63', 'Amg'],
+    'Mercedes': ['C300', 'E350', 'E320', 'E300', 'Ml350', 'Glk350', 'S550', 'S500', 'Gle', 'Glc', 'Gla', 'Sprinter', 'C63', 'Amg', 'C230', 'C240', 'C250'],
     'Subaru': ['Outback', 'Forester', 'Impreza', 'Legacy', 'Crosstrek', 'Wrx', 'Brz', 'Ascent'],
     'Volkswagen': ['Jetta', 'Passat', 'Golf', 'Gti', 'Tiguan', 'Touareg', 'Atlas', 'Beetle'],
     'Vw': ['Jetta', 'Passat', 'Golf', 'Gti', 'Tiguan', 'Touareg', 'Atlas', 'Beetle'],
@@ -55,7 +67,24 @@ car_models_dict = {
     'Dodge': ['Charger', 'Challenger', 'Grand Caravan', 'Durango', 'Journey', 'Dart'],
     'Ram': ['1500', '2500', '3500', 'Promaster'],
     'Gmc': ['Sierra', 'Acadia', 'Terrain', 'Yukon', 'Canyon', 'Savana'],
-    'Tesla': ['Model 3', 'Model Y', 'Model S', 'Model X', 'Cybertruck']
+    'Tesla': ['Model 3', 'Model Y', 'Model S', 'Model X', 'Cybertruck'],
+    'Mini': ['Cooper', 'Countryman', 'Clubman', 'Hardtop', 'Paceman', 'Cooper S'],
+    'Acura': ['Mdx', 'Rdx', 'Tlx', 'Ilx', 'Integra', 'Tsx', 'Tl', 'Rsx', 'Rl', 'Rlx'],
+    'Lucid': ['Air'],
+    'Rivian': ['R1T', 'R1S'],
+    'Polestar': ['Polestar 2', 'Polestar 3'], 
+    'Fisker': ['Ocean', 'Karma'],
+    'Cadillac': ['Escalade', 'Cts', 'Ats', 'Xt5', 'Xt4', 'Srx', 'Xts', 'Deville', 'Seville'],
+    'Infiniti': ['G37', 'G35', 'Q50', 'Qx60', 'Qx80', 'Q60', 'Fx35', 'M35'],
+    'Volvo': ['Xc90', 'Xc60', 'Xc40', 'S60', 'S90', 'V60', 'V90'],
+    'Mitsubishi': ['Outlander', 'Lancer', 'Eclipse', 'Mirage', 'Galant'],
+    'Porsche': ['911', 'Cayenne', 'Macan', 'Panamera', 'Boxster', 'Cayman', 'Taycan'],
+    'Land Rover': ['Range Rover', 'Discovery', 'Defender', 'Evoque', 'Lr4', 'Lr3'],
+    'Jaguar': ['Xf', 'Xj', 'F-Type', 'F-Pace', 'E-Pace', 'I-Pace', 'Xe'],
+    'Chrysler': ['300', 'Pacifica', 'Town & Country', 'Sebring', 'Pt Cruiser'],
+    'Buick': ['Enclave', 'Encore', 'Envision', 'Lacrosse', 'Regal', 'Lucerne'],
+    'Pontiac': ['Grand Prix', 'G6', 'Grand Am', 'Vibe', 'Firebird', 'G8', 'Bonneville'],
+    'Saturn': ['Vue', 'Ion', 'Aura', 'Sky', 'Outlook']
 }
 
 def extract_make(title):
@@ -210,3 +239,93 @@ def evaluate_url(url_data: URLData):
         "difference": difference,
         "verdict": verdict
     }
+
+@app.get("/feed")
+def get_market_feed():
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    csv_path = os.path.join(base_dir, 'data', 'clean_listings.csv')
+    
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        print(f"Error loading CSV: {e}")
+        return []
+        
+    current_year = datetime.datetime.now().year
+    df['age'] = current_year - df['year']
+    df = df.dropna(subset=['age', 'make', 'model', 'mileage', 'location', 'price', 'url'])
+    
+    # Predict prices
+    input_df = df[['age', 'make', 'model', 'mileage', 'location']]
+    cat_encoded = ohe.transform(input_df[['make', 'model', 'location']])
+    cat_df = pd.DataFrame(cat_encoded, columns=ohe.get_feature_names_out(), index=input_df.index)
+    num_df = input_df[['age', 'mileage']]
+    final_df = pd.concat([num_df, cat_df], axis=1)
+    final_df = final_df.reindex(columns=model_columns, fill_value=0)
+    
+    df['predicted_price'] = model.predict(final_df)
+    df['difference'] = df['predicted_price'] - df['price']
+    
+    # Randomly sample 6 cars
+    sample_df = df.sample(n=6, replace=False)
+
+    def clean_location(loc):
+        loc = str(loc).lower().strip()
+
+        # Bay Area location slugs, mapped back to their proper display names.
+        replacements = {
+            'southsanfrancisco': 'South San Francisco',
+            'sanjosedowntown': 'San Jose Downtown',
+            'sanjose': 'San Jose',
+            'sanfrancisco': 'San Francisco',
+            'santaclara': 'Santa Clara',
+            'sanleandro': 'San Leandro',
+            'sanbruno': 'San Bruno',
+            'sanmateo': 'San Mateo',
+            'santarosa': 'Santa Rosa',
+            'sancarlos': 'San Carlos',
+            'walnutcreek': 'Walnut Creek',
+            'castrovalley': 'Castro Valley',
+            'dalycity': 'Daly City',
+            'mountainview': 'Mountain View',
+            'redwoodcity': 'Redwood City',
+            'unioncity': 'Union City',
+            'losgatos': 'Los Gatos',
+            'pleasanthill': 'Pleasant Hill',
+            'elcerrito': 'El Cerrito',
+            'halfmoonbay': 'Half Moon Bay',
+            'napacounty': 'Napa County',
+            'hayesvalley': 'Hayes Valley',
+            'eastbayarea': 'East Bay Area',
+            'willowglen': 'Willow Glen',
+            'losaltos': 'Los Altos',
+            'oaklandeast': 'Oakland East',
+            'sananselmo': 'San Anselmo',
+            'bernalheights': 'Bernal Heights',
+            'redwoodshores': 'Red Wood Shores',
+            'santacruz': 'Santa Cruz',
+            'sanrafael': 'San Rafael',
+            'morganhill': 'Morgan Hill',
+            'berkeleynorth': 'Berkeley North'
+        }
+
+        # Check the longest slugs first, so "sanjosedowntown" matches before the shorter "sanjose" substring inside it.
+        for wrong in sorted(replacements, key=len, reverse=True):
+            if wrong in loc:
+                return replacements[wrong]
+
+        return loc.title()
+
+    feed_data = []
+    for _, row in sample_df.iterrows():
+        clean_name = f"{int(row['year'])} {row['make']} {row['model']}"
+        feed_data.append({
+            "name": clean_name,
+            "location": clean_location(row['location']), # Use the cleaner here
+            "list_price": float(row['price']),
+            "ai_price": float(row['predicted_price']),
+            "difference": float(row['difference']),
+            "url": str(row['url'])
+        })
+        
+    return feed_data
