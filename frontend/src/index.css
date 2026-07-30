@@ -1,0 +1,79 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Disable text highlighting site-wide except for inputs */
+*,
+*::before,
+*::after {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+input, textarea {
+  -webkit-user-select: auto;
+  -moz-user-select: auto;
+  -ms-user-select: auto;
+  user-select: auto;
+}
+
+/* Invisible selection globally */
+::selection {
+  background: transparent;
+}
+::-moz-selection {
+  background: transparent;
+}
+
+/* Indigo selection highlight for the input field */
+input::selection {
+  background: rgba(99, 102, 241, 0.4); 
+  color: #ffffff;
+}
+input::-moz-selection {
+  background: rgba(99, 102, 241, 0.4);
+  color: #ffffff;
+}
+
+body {
+  background-color: #030308;
+  background-image:
+    radial-gradient(circle at 15% 50%, rgba(31, 41, 55, 0.4) 0%, transparent 25%),
+    radial-gradient(circle at 85% 30%, rgba(49, 46, 129, 0.3) 0%, transparent 25%),
+    radial-gradient(circle at 50% 80%, rgba(76, 29, 149, 0.2) 0%, transparent 25%);
+  background-attachment: fixed;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: #ffffff;
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animated-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 4s ease infinite;
+}
+
+/* Insert image behind the text that says 'Bay Area' for a nice effect. */
+.bay-area-text {
+  text-transform: uppercase;
+  background-image: url('/image.jpg');
+  font-weight: 900;
+  background-size: cover; 
+  background-position: center 30%; 
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  transform: scaleY(1.7); 
+  transform-origin: top; 
+  margin-bottom: 0.5em; 
+}
