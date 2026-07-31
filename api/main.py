@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 from fastapi.middleware.cors import CORSMiddleware
 import datetime
 import os
+from fastapi import Response
 
 # 1. Initialize the App
 app = FastAPI(title="AutoValuate API")
@@ -16,9 +17,9 @@ app = FastAPI(title="AutoValuate API")
 def read_root():
     return {"status": "AutoValuate API is running!"}
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
-    return {"status": "healthy"}
+    return Response(status_code=200)
 
 app.add_middleware(
     CORSMiddleware,
