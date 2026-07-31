@@ -306,7 +306,9 @@ def get_market_feed():
             'santacruz': 'Santa Cruz',
             'sanrafael': 'San Rafael',
             'morganhill': 'Morgan Hill',
-            'berkeleynorth': 'Berkeley North'
+            'berkeleynorth': 'Berkeley North',
+            'scottottsvalley': 'Scotts Valley',
+            'scottsvalley': 'Scotts Valley'
         }
 
         # Check the longest slugs first, so "sanjosedowntown" matches before the shorter "sanjose" substring inside it.

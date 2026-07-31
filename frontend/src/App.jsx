@@ -320,8 +320,12 @@ function App() {
         </div>
       </section>
 
-      <footer className="border-t border-white/5 py-8 px-12 text-center text-sm text-gray-600 relative z-10">
-        Built by Abhinav
+      <footer className="border-t border-white/5 py-8 px-12 flex flex-col md:flex-row justify-between items-center text-xs text-gray-500 relative z-10 gap-4">
+        <div>© {new Date().getFullYear()} AutoValuate. All rights reserved.</div>
+        <div className="flex items-center gap-6">
+          <a href="https://github.com/abhiswrld" target="_blank" rel="noreferrer" className="hover:text-white transition">GitHub ↗</a>
+          <a href="https://www.linkedin.com/in/abhinav-khanna06/" target="_blank" rel="noreferrer" className="hover:text-white transition">LinkedIn ↗</a>
+        </div>
       </footer>
     </div>
   )
