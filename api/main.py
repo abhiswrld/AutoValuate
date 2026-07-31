@@ -12,6 +12,10 @@ import os
 # 1. Initialize the App
 app = FastAPI(title="AutoValuate API")
 
+@app.get("/")
+def read_root():
+    return {"status": "AutoValuate API is running!"}
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], # Allows React app to connect to backend
