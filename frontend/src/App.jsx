@@ -48,14 +48,16 @@ const RefreshIcon = ({ className = 'w-4 h-4' }) => (
 )
 
 function App() {
+  const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
   const [url, setUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [feed, setFeed] = useState([])
+  const [showWipMsg, setShowWipMsg] = useState(false) // Added state for pop-up
 
   const fetchFeed = () => {
-    axios.get('http://127.0.0.1:8000/feed')
+    axios.get(`${API_URL}/feed`)
       .then(res => setFeed(res.data))
       .catch(err => console.error("Failed to load feed:", err))
   }
@@ -73,7 +75,7 @@ function App() {
     setResult(null)
 
     try {
-      const response = await axios.post('http://127.0.0.1:8000/evaluate_url', { url })
+      const response = await axios.post(`${API_URL}/evaluate_url`, { url })
       if (response.data.error) {
         setError(response.data.error)
       } else {
@@ -117,11 +119,15 @@ function App() {
             AutoValuate
           </span>
         </h1>
-        <div className="space-x-8 text-sl font-medium text-gray-400">
-          <a href="#" className="hover:text-white transition">Feed</a>
-          <a href="#" className="hover:text-white transition">Insights</a>
-          <a href="#" className="hover:text-white transition">API</a>
-          <a href="#" className="hover:text-white transition">GitHub ↗</a>
+        <div className="flex items-center space-x-8 text-base font-medium text-gray-400">
+          <a href="#feed" className="hover:text-white transition">Feed</a>
+          {/* Updated Insights link */}
+          <a href="#" onClick={(e) => { e.preventDefault(); setShowWipMsg(true) }} className="hover:text-white transition">Insights</a>
+          <a href={`${API_URL}/docs`} target="_blank" rel="noreferrer" className="hover:text-white transition">API</a>
+          {/* Updated Login button */}
+          <button onClick={() => setShowWipMsg(true)} className="px-4 py-1.5 bg-white/5 border border-white/10 text-white hover:bg-white/10 transition rounded-lg text-base">
+            Login
+          </button>
         </div>
       </nav>
 
@@ -246,7 +252,7 @@ function App() {
       </AnimatePresence>
 
       {/* Market feed of live listings pulled from the backend */}
-      <section className="max-w-6xl mx-auto px-6 py-12 border-t border-white/5 relative z-10">
+      <section id="feed" className="max-w-6xl mx-auto px-6 py-12 border-t border-white/5 relative z-10">
         <div className="flex justify-between items-end mb-8">
           <h3 className="text-3xl font-bold tracking-tight text-white">Market Feed</h3>
           <button
@@ -327,6 +333,22 @@ function App() {
           <a href="https://www.linkedin.com/in/abhinav-khanna06/" target="_blank" rel="noreferrer" className="hover:text-white transition">LinkedIn ↗</a>
         </div>
       </footer>
+
+      {/* Work in Progress Pop-up Toast (Top Right) */}
+      <AnimatePresence>
+        {showWipMsg && (
+          <motion.div 
+            key="wip-toast" 
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 50 }}
+            className="fixed top-[105px] right-[10px] bg-black/80 backdrop-blur-md border border-white/10 text-white px-6 py-3 rounded-xl shadow-2xl z-50 flex items-center gap-4"
+          >
+            <span>This feature is a work in progress!</span>
+            <button onClick={() => setShowWipMsg(false)} className="text-gray-400 hover:text-white">✕</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
