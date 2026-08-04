@@ -1,0 +1,43 @@
+name: Daily Craigslist Scrape
+
+on:
+  schedule:
+    # Runs every day at 10:00 AM Pacific Time (17:00 UTC)
+    - cron: '0 17 * * *'
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write # Gives the bot permission to push the CSV back to repo
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Run Scraper
+        run: python scraper/test_scraper.py
+
+      - name: Commit and push if data changed
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action Bot"
+          git add data/raw_listings.csv
+          if git diff --cached --quiet; then
+            echo "No new data to commit."
+          else
+            git commit -m "data: automated daily scrape update"
+            git push
+          fi
