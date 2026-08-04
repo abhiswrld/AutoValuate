@@ -53,7 +53,7 @@ manufacturers = [
     'Audi', 'Lexus', 'Subaru', 'Volkswagen', 'Vw', 'Hyundai', 'Kia', 'Mazda', 'Acura', 'Jeep', 
     'Dodge', 'Ram', 'GMC', 'Cadillac', 'Infiniti', 'Volvo', 'Mitsubishi', 'Mini',
     'Porsche', 'Tesla', 'Land Rover', 'Jaguar', 'Chrysler', 'Buick', 'Pontiac', 'Saturn',
-    'Lucid', 'Rivian', 'Polestar', 'Fisker'
+    'Lucid', 'Rivian', 'Polestar', 'Fisker', 'Bentley'
 ]
 
 car_models_dict = {
@@ -94,6 +94,7 @@ car_models_dict = {
     'Buick': ['Enclave', 'Encore', 'Envision', 'Lacrosse', 'Regal', 'Lucerne', 'Rendezvous', 'Rainier', 'Terraza', 'Skyhawk', 'Skylark', 'Reatta', 'Electra', 'Century', 'LeSabre', 'Roadmaster', 'Park Avenue', 'Riviera', 'Gran Sport'],
     'Pontiac': ['Grand Prix', 'G6', 'Grand Am', 'Vibe', 'Firebird', 'G8', 'Bonneville', 'G5', 'G3', 'Solstice', 'Torrent', 'Aztek', 'Sunfire', 'Montana', 'Wave', 'Fiero', 'LeMans', 'Tempest', 'Catalina', 'Safari', 'Parisienne', 'GTO'],
     'Saturn': ['Vue', 'Ion', 'Aura', 'Sky', 'Outlook', 'L-Series', 'S-Series', 'SL', 'SC', 'SW', 'LW', 'VUE Red Line', 'VUE Green Line', 'VUE Hybrid', 'VUE Sport', 'VUE XR', 'VUE XE', 'VUE XRE', 'VUE XRS', 'VUE XRT', 'VUE XRV', 'VUE XRW', 'VUE XRX', 'VUE XRY', 'VUE XRZ'],
+    'Bently': ['Continental', 'Flying Spur', 'Mulsanne', 'Arnage', 'Azure', 'Brooklands', 'Turbo R', 'Turbo S', 'Turbo RT', 'Turbo RT Speed', 'Turbo RT Mulliner', 'Turbo RT Le Mans', 'Turbo RT Le Mans Edition', 'Turbo RT Le Mans Edition 2003', 'Turbo RT Le Mans Edition 2004', 'Turbo RT Le Mans Edition 2005', 'Turbo RT Le Mans Edition 2006', 'Turbo RT Le Mans Edition 2007', 'Turbo RT Le Mans Edition 2008', 'Turbo RT Le Mans Edition 2009', 'Turbo RT Le Mans Edition 2010'],
 }
 
 def extract_make(title):
