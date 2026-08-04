@@ -2,6 +2,7 @@ from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import pandas as pd
 import time
+import os
 
 def scrape_craigslist():
     with sync_playwright() as p:
@@ -33,7 +34,7 @@ def scrape_craigslist():
                 if data:
                     all_cars_data.append(data)
             
-            # 3. Scroll down using the MOUSE WHEEL (Much more reliable!)
+            # 3. Scroll down using the MOUSE WHEEL
             page.mouse.wheel(0, 10000)
             
             # 4. Wait 3 seconds for the new batch to load
@@ -113,10 +114,29 @@ def extract_listing_data(listing):
     return vehicle_stats
 
 def save_to_csv(data, filename):
-    df = pd.DataFrame(data)
-    df.to_csv(filename, index=False)
-    print(f"Saved {len(df)} unique cars to {filename}")
-    print(df.head())
-
+    # 1. Convert the newly scraped data into a DataFrame
+    new_df = pd.DataFrame(data)
+    
+    # 2. Try to read the existing CSV
+    if os.path.exists(filename):
+        old_df = pd.read_csv(filename)
+        print(f"Found {len(old_df)} existing cars in the database.")
+        
+        # 3. Glue the old data and new data together
+        combined_df = pd.concat([old_df, new_df], ignore_index=True)
+        
+        # 4. Drop duplicates based on the URL (keeps the first occurrence)
+        combined_df = combined_df.drop_duplicates(subset=['url'])
+        
+        print(f"Added {len(combined_df) - len(old_df)} new unique cars today!")
+    else:
+        # If the file doesn't exist yet, just use the new data
+        print("No existing database found. Creating a new one.")
+        combined_df = new_df.drop_duplicates(subset=['url'])
+        
+    # 5. Save the final combined database back to the CSV
+    combined_df.to_csv(filename, index=False)
+    print(f"Total unique cars in database: {len(combined_df)}")
+    
 if __name__ == "__main__":
     scrape_craigslist()
