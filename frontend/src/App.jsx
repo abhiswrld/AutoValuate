@@ -104,7 +104,7 @@ function App() {
     const isGoodDeal = difference > 0
     const amount = Math.abs(difference / 1000).toFixed(1)
     return {
-      text: isGoodDeal ? `$${amount}k under market value` : `$${amount}k over market value`,
+            text: isGoodDeal ? `$${amount}k under AI prediction` : `$${amount}k over AI prediction`,
       colorClass: isGoodDeal ? 'text-emerald-300/90' : 'text-rose-300/90',
     }
   }
@@ -228,7 +228,7 @@ function App() {
                   </div>
 
                   <div className="text-right shrink-0">
-                    <p className="text-sm text-gray-400 mb-1">AI Market Value</p>
+                    <p className="text-sm text-gray-400 mb-1">AI Prediction</p>
                     <p className="text-3xl font-bold text-indigo-300">${result.predicted_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
                   </div>
 
@@ -303,7 +303,7 @@ function App() {
                         <p className="text-3xl font-extrabold text-white">${car.list_price.toLocaleString()}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs uppercase tracking-widest text-indigo-400/80 mb-1 font-semibold">AI Value</p>
+                        <p className="text-xs uppercase tracking-widest text-indigo-400/80 mb-1 font-semibold">AI Prediction</p>
                         <p className="text-3xl font-extrabold text-indigo-300">${car.ai_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
                       </div>
                     </div>
