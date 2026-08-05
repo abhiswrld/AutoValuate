@@ -13,42 +13,58 @@ def scrape_craigslist():
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
         })
         
-        print("Navigating to Craigslist...")
-        page.goto("https://sfbay.craigslist.org/search/cto")
-        page.wait_for_selector(".cl-search-result")
-        print("Initial listings loaded. Starting scroll loop...")
+        # Top 10 US Craigslist Regions
+        regions = [
+            'sfbay', 'losangeles', 'newyork', 'seattle', 'chicago', 
+            'dallas', 'miami', 'atlanta', 'boston', 'phoenix'
+        ]
         
         all_cars_data = []
         
-        for i in range(30):
-            print(f"Scrolling... (Iteration {i + 1}/30)")
+        for region in regions:
+            print(f"\nNavigating to Craigslist {region.upper()}...")
+            url = f"https://{region}.craigslist.org/search/cto"
             
-            # 1. Grab the HTML currently on the screen
-            html = page.content()
-            soup = BeautifulSoup(html, "html.parser")
-            listings = soup.find_all("div", class_="cl-search-result cl-search-view-mode-gallery")
+            try:
+                page.goto(url, timeout=15000)
+                page.wait_for_selector(".cl-search-result", timeout=10000)
+                print(f"Initial listings loaded for {region.upper()}. Starting scroll loop...")
+            except Exception as e:
+                print(f"Failed to load {region.upper()}. Skipping. Error: {e}")
+                continue
             
-            # 2. Extract data from these visible listings
-            for listing in listings:
-                data = extract_listing_data(listing)
-                if data:
-                    all_cars_data.append(data)
-            
-            # 3. Scroll down using the MOUSE WHEEL
-            page.mouse.wheel(0, 10000)
-            
-            # 4. Wait 3 seconds for the new batch to load
-            time.sleep(3)
+            # 15 loops per region to get ~300-500 cars each without taking all day
+            for i in range(15):
+                print(f"Scrolling {region.upper()}... (Iteration {i + 1}/15)")
+                
+                # 1. Grab the HTML currently on the screen
+                html = page.content()
+                soup = BeautifulSoup(html, "html.parser")
+                listings = soup.find_all("div", class_="cl-search-result cl-search-view-mode-gallery")
+                
+                # 2. Extract data from these visible listings
+                for listing in listings:
+                    data = extract_listing_data(listing)
+                    if data:
+                        all_cars_data.append(data)
+                
+                # 3. Scroll down using the MOUSE WHEEL
+                page.mouse.wheel(0, 10000)
+                
+                # 4. Wait 3 seconds for the new batch to load
+                time.sleep(3)
+                
+            # Need to wait a bit before moving to the next region to avoid being flagged as a bot
+            time.sleep(2)
         
-        print("Done scrolling. Saving data...\n")
+        print("\nDone scrolling all regions. Saving data...\n")
+        browser.close()
         
         # Deduplicate the data
         df = pd.DataFrame(all_cars_data)
         df = df.drop_duplicates(subset=['url'])
 
         save_to_csv(df.to_dict('records'), "data/raw_listings.csv")
-
-        browser.close()
 
 def extract_listing_data(listing):
     # 1. Find the title of the vehicle

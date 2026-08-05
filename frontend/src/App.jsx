@@ -139,10 +139,10 @@ function App() {
           className="inline-flex flex-col items-stretch text-center mb-6"
         >
           <h2 className="text-3xl md:text-[3.25rem] font-extrabold tracking-tighter text-white whitespace-nowrap">
-            Never overpay for a used car in the
+            Never overpay for a used car
           </h2>
           <div className="flex justify-between bay-area-text text-[6rem] md:text-[9.5rem] leading-none mt-1">
-            <span>B</span><span>A</span><span>Y</span><span>&nbsp;</span><span>A</span><span>R</span><span>E</span><span>A</span>
+            <span>A</span><span>N</span><span>Y</span><span>&nbsp;</span><span>W</span><span>H</span><span>E</span><span>R</span><span>E</span>
           </div>
         </motion.div>
 
@@ -152,7 +152,7 @@ function App() {
           transition={{ duration: 0.8, delay: 0.4 }}
           className="text-gray-400 text-base md:text-lg mb-8 max-w-lg mx-auto leading-relaxed font-light"
         >
-          Instantly evaluate any listing against real-time market data using Artificial Intelligence.
+          Instantly evaluate any listing against real-time nationwide market data using Artificial Intelligence.
         </motion.p>
 
         <motion.form
