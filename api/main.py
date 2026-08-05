@@ -205,7 +205,6 @@ def evaluate_url(url_data: URLData):
         return {"error": "Could not extract year from title."}
     
     year = int(year_match.group(0))
-    import datetime
     age = datetime.datetime.now().year - year
 
     # Default location if we can't find it
@@ -261,12 +260,9 @@ def get_market_feed():
     if not db_engine:
         return {"error": "Database not configured"}
         
-    # 1. Run a SQL query to get 6 random cars
-    query = text("SELECT name, location, price, predicted_price, difference, url FROM cars ORDER BY RANDOM() LIMIT 6")
-    
-    with db_engine.connect() as conn:
-        result = conn.execute(query)
-        cars = result.fetchall()
+    # 1. Use Pandas to read directly from the database
+    query = "SELECT * FROM cars ORDER BY RANDOM() LIMIT 6"
+    df = pd.read_sql(query, db_engine)
 
     # 2. Clean up the location names for the UI
     def clean_location(loc):
@@ -288,17 +284,25 @@ def get_market_feed():
                 return right
         return loc.title()
 
-    # 3. Format the data into JSON
+    # 2. Format the data into JSON
     feed_data = []
-    for car in cars:
-        clean_name = f"{car.year} {car.make} {car.model}".strip()
+    for _, row in df.iterrows():
+        # Construct a perfectly clean name
+        clean_name = f"{row.get('year', '')} {row.get('make', '')} {row.get('model', '')}".strip()
+        
+        # Safely get mileage (handle NaN)
+        mileage = row.get('mileage', 0)
+        if pd.isna(mileage):
+            mileage = 0
+            
         feed_data.append({
             "name": clean_name,
-            "location": clean_location(car.location),
-            "list_price": float(car.price),
-            "ai_price": float(car.predicted_price),
-            "difference": float(car.difference),
-            "url": str(car.url)
+            "mileage": int(mileage),
+            "location": clean_location(row.get('location', 'unknown')),
+            "list_price": float(row.get('price', 0)),
+            "ai_price": float(row.get('predicted_price', 0)),
+            "difference": float(row.get('difference', 0)),
+            "url": str(row.get('url', '#'))
         })
         
     return feed_data
