@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import datetime
 import os
 from fastapi import Response
+from sqlalchemy import create_engine, text
 
 # 1. Initialize the App
 app = FastAPI(title="AutoValuate API")
@@ -36,7 +37,12 @@ ohe = joblib.load('api/ohe.pkl')
 model_columns = joblib.load('api/model_columns.pkl')
 print("Models loaded successfully!")
 
-# 3. Define Input Schemas
+# 3. Initialize Database Connection
+DATABASE_URL = os.getenv("DATABASE_URL")
+db_engine = create_engine(DATABASE_URL) if DATABASE_URL else None
+print("Database engine created!")
+
+# 4. Define Input Schemas
 class CarData(BaseModel):
     age: int
     make: str
@@ -252,69 +258,46 @@ def evaluate_url(url_data: URLData):
 
 @app.get("/feed")
 def get_market_feed():
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    csv_path = os.path.join(base_dir, 'data', 'clean_listings.csv')
-    
-    try:
-        df = pd.read_csv(csv_path)
-    except Exception as e:
-        print(f"Error loading CSV: {e}")
-        return []
+    if not db_engine:
+        return {"error": "Database not configured"}
         
-    current_year = datetime.datetime.now().year
-    df['age'] = current_year - df['year']
-    df = df.dropna(subset=['age', 'make', 'model', 'mileage', 'location', 'price', 'url'])
+    # 1. Run a SQL query to get 6 random cars
+    query = text("SELECT name, location, price, predicted_price, difference, url FROM cars ORDER BY RANDOM() LIMIT 6")
     
-    # Predict prices
-    input_df = df[['age', 'make', 'model', 'mileage', 'location']]
-    cat_encoded = ohe.transform(input_df[['make', 'model', 'location']])
-    cat_df = pd.DataFrame(cat_encoded, columns=ohe.get_feature_names_out(), index=input_df.index)
-    num_df = input_df[['age', 'mileage']]
-    final_df = pd.concat([num_df, cat_df], axis=1)
-    final_df = final_df.reindex(columns=model_columns, fill_value=0)
-    
-    df['predicted_price'] = model.predict(final_df)
-    df['difference'] = df['predicted_price'] - df['price']
-    
-    # Randomly sample 6 cars
-    sample_df = df.sample(n=6, replace=False)
+    with db_engine.connect() as conn:
+        result = conn.execute(query)
+        cars = result.fetchall()
 
+    # 2. Clean up the location names for the UI
     def clean_location(loc):
         loc = str(loc).lower().strip()
-
-        # Replace common misspellings or abbreviations with proper city names
         replacements = {
             'sanjose': 'San Jose, CA',
             'sanfrancisco': 'San Francisco, CA',
             'losangeles': 'Los Angeles, CA',
             'newyork': 'New York, NY',
-            'newjersey': 'New Jersey, NY',
             'longbeach': 'Long Beach, CA',
             'santaclara': 'Santa Clara, CA',
-            'santabarbara': 'Santa Barbara, CA',
             'sancarlos': 'San Carlos, CA',
             'sanbruno': 'San Bruno, CA',
             'sanmateo': 'San Mateo, CA',
             'sanleandro': 'San Leandro, CA'
         }
-
-        # Check the longest slugs first, so "sanjosedowntown" matches before the shorter "sanjose" substring inside it.
-        for wrong in sorted(replacements, key=len, reverse=True):
+        for wrong, right in replacements.items():
             if wrong in loc:
-                return replacements[wrong]
-
+                return right
         return loc.title()
 
+    # 3. Format the data into JSON
     feed_data = []
-    for _, row in sample_df.iterrows():
-        clean_name = f"{int(row['year'])} {row['make']} {row['model']}"
+    for car in cars:
         feed_data.append({
-            "name": clean_name,
-            "location": clean_location(row['location']), # Use the cleaner here
-            "list_price": float(row['price']),
-            "ai_price": float(row['predicted_price']),
-            "difference": float(row['difference']),
-            "url": str(row['url'])
+            "name": str(car.name).title(),
+            "location": clean_location(car.location),
+            "list_price": float(car.price),
+            "ai_price": float(car.predicted_price),
+            "difference": float(car.difference),
+            "url": str(car.url)
         })
         
     return feed_data

@@ -8,3 +8,5 @@ playwright
 beautifulsoup4
 joblib
 pydantic
+sqlalchemy
+psycopg2-binary

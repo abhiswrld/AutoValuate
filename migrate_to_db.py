@@ -21,7 +21,7 @@ def migrate_data():
     df = df.dropna(subset=['age', 'make', 'model', 'mileage', 'location', 'price', 'url'])
     
     # 3. Run ML Inference on ALL rows locally
-    print("Running ML inference on 15,000+ cars...")
+    print("Running ML inference on data")
     input_df = df[['age', 'make', 'model', 'mileage', 'location']]
     cat_encoded = ohe.transform(input_df[['make', 'model', 'location']])
     cat_df = pd.DataFrame(cat_encoded, columns=ohe.get_feature_names_out(), index=input_df.index)
