@@ -44,4 +44,4 @@ def migrate_data():
     print(f"Total cars uploaded: {len(df)}")
 
 if __name__ == "__main__":
-    migrate_data()
+    migrate_data() 
