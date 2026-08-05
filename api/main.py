@@ -292,7 +292,7 @@ def get_market_feed():
     feed_data = []
     for car in cars:
         feed_data.append({
-            "name": str(car.name).title(),
+            "name": str(car.name),
             "location": clean_location(car.location),
             "list_price": float(car.price),
             "ai_price": float(car.predicted_price),
