@@ -1,44 +1,57 @@
 # AutoValuate
 
-Live Demo: https://autovaluate.netlify.app
+**Live Demo:** [autovaluate.netlify.app](https://autovaluate.netlify.app)
 
 AutoValuate is an end-to-end machine learning application that scrapes live used car listings, predicts their true market value using XGBoost, and highlights underpriced deals in real-time.
 
 Instead of relying on static, pre-cleaned datasets, AutoValuate features a custom-built web scraper that extracts real-time data from Craigslist. It processes messy HTML using BeautifulSoup and custom NLP logic, feeds it into a trained regression model, and serves it through a React frontend to find arbitrage opportunities for buyers.
 
 ## Tech Stack
-* **Backend:** Python, FastAPI, Uvicorn
-* **Machine Learning:** XGBoost, Scikit-Learn, Pandas, NumPy, Seaborn, Matplotlib
-* **Web Scraping:** Playwright, BeautifulSoup
-* **Frontend:** React, Vite, Tailwind CSS, Framer Motion
-* **Deployment:** Docker, Render (Backend), Netlify (Frontend)
+
+- **Backend:** Python, FastAPI, Uvicorn
+- **Machine Learning:** XGBoost, Scikit-Learn, Pandas, NumPy, Seaborn, Matplotlib
+- **Web Scraping:** Playwright, BeautifulSoup
+- **Frontend:** React, Vite, Tailwind CSS, Framer Motion
+- **DevOps & Deployment:** Docker, GitHub Actions (CI/CD), Render (Backend), Netlify (Frontend)
 
 ## Architecture and Pipeline
 
-**1. Data Ingestion:**
-A custom Playwright scraper bypasses anti-bot protections and infinite-scroll limitations to extract live listings from Craigslist. Instead of standard pagination, the scraper simulates physical mouse wheel scrolling to trigger the site's virtual DOM, successfully capturing over 2,000 live listings.
+**1. Data Ingestion**
+A custom Playwright scraper bypasses anti-bot protections and infinite-scroll limitations to extract live listings from Craigslist. Instead of standard pagination, the scraper simulates physical mouse wheel scrolling to trigger the site's virtual DOM. It currently runs on an automated daily CI/CD schedule across 10 major US markets, successfully capturing over 15,000 live listings and growing.
 
-**2. Data Processing:**
+**2. Data Processing**
 Raw listing titles (e.g., "2014 Audi A7 Prestige Quattro") are parsed using Regex and custom dictionary-based NLP. The pipeline extracts and structures the Year, Make, and Model, while filtering out extreme price and mileage outliers to ensure dataset integrity.
 
-**3. Model Training:**
-An XGBoost Regressor is trained on the cleaned dataset. The model evaluates features including age, mileage, make, model, and location to predict fair market value. It achieves a Mean Absolute Error (MAE) of approximately $3,000. The trained model and One-Hot Encoder are exported as artifacts.
+**3. Model Training**
+An XGBoost Regressor is trained on the cleaned dataset. The model evaluates features including age, mileage, make, model, and location to predict fair market value. It currently achieves an R-Squared of 0.69 and a Mean Absolute Error (MAE) of approximately $3,100. The trained model and One-Hot Encoder are exported as `.pkl` artifacts.
 
-**4. Live Inference API:**
+**4. Live Inference API**
 A FastAPI backend serves the trained model. Users can paste a live Craigslist URL into the frontend. The backend uses Playwright to scrape that specific posting in real-time, cleans the extracted text, and runs it through the ML model to determine if the car is a "Steal" or "Overpriced".
 
 ## Features
-* **Live URL Valuation:** Paste any Craigslist URL to get an instant AI valuation and deal verdict.
-* **Market Feed:** A dashboard of live listings automatically evaluated by the AI, displaying the listed price versus the predicted market value.
-* **Sleek UI:** Built with Tailwind CSS and Framer Motion for a premium, responsive user experience.
+
+- **Live URL Valuation:** Paste any Craigslist URL to get an instant AI valuation and deal verdict.
+- **Nationwide Market Feed:** A dashboard of live listings automatically evaluated by the AI, displaying the listed price versus the predicted market value across major US cities.
+- **Sleek UI:** Built with Tailwind CSS and Framer Motion for a premium, responsive user experience.
 
 ## V2 Roadmap (Work in Progress)
 
-AutoValuate is currently a functional V1 MVP. The following features and improvements are planned for V2:
+AutoValuate is currently a functional V1 MVP. The following features and improvements are planned for V2 to transform the platform into a full-scale, production-ready application:
 
-* **Multi-City Data Expansion:** Expanding the scraper to cover multiple major US markets (New York, Los Angeles, Chicago, Seattle) to increase the dataset from 2,000 to over 100,000 records.
-* **PostgreSQL Database Integration:** Transitioning from a static CSV to a live database. A cron job will run the scraper hourly to ingest new listings and automatically delete listings older than 30 days to keep the market feed current and fast.
-* **Advanced NLP for Trim Extraction:** Implementing spaCy or an LLM API to accurately extract specific vehicle trims (e.g., distinguishing a base model Civic from a Civic EX-L) to further reduce the MAE and increase prediction accuracy.
-* **Market Insights Dashboard:** Building out the Insights page with interactive charts (Recharts) showing depreciation curves by make and the impact of mileage on price.
-* **User Accounts and Watchlists:** Adding authentication so users can save specific cars to a personal watchlist to track price changes over time.
-* **Listing Image Integration:** Updating the scraper to capture the actual photos from Craigslist postings and using them as the background for the glassmorphism cards in the Market Feed.
+### Infrastructure & MLOps
+- **PostgreSQL Database Integration:** Transitioning from static CSVs to a live cloud database to enable lightning-fast queries and handle 100,000+ records.
+- **Automated ETL Pipeline:** Expanding the GitHub Actions CI/CD to automatically run the scraper, clean the data, and load it into the database daily without manual intervention.
+- **Asynchronous Background Tasks:** Implementing FastAPI BackgroundTasks so live URL evaluations return a ticket instantly, preventing the UI from freezing during heavy Playwright scraping.
+
+### Accuracy & Data Depth
+- **Deep Scraping (Condition & Title Status):** Building a secondary scraper to visit individual listing URLs and extract crucial attributes (Clean/Salvage Title, Condition, Transmission) to feed into XGBoost, aiming to reduce MAE to under $1,500.
+- **Advanced NLP / LLM Integration:** Replacing the hardcoded Make/Model dictionary with a smarter approach using spaCy (Named Entity Recognition) or an LLM API to automatically extract Make, Model, and Trim (e.g., distinguishing a base model Civic from a Civic EX-L) without manual database maintenance.
+
+### User Experience & Personalization
+- **User Authentication:** Adding Google OAuth and Email/Password login so users have personalized profiles.
+- **Watchlists & Alerts:** Allowing authenticated users to save specific cars to a personal watchlist to track price changes over time.
+- **City Filtering:** Enabling users to select their preferred city/region to dynamically filter the Market Feed.
+
+### Data Visualization
+- **Market Insights Dashboard:** Building out the Insights page with interactive charts (Recharts) showing price depreciation curves by make/model and the visual impact of mileage on price.
+- **Listing Image Integration:** Updating the scraper to capture the actual photos from Craigslist postings and using them as the background for the glassmorphism cards in the Market Feed.
