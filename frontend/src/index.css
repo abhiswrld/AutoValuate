@@ -62,13 +62,13 @@ body {
   animation: gradient-shift 4s ease infinite;
 }
 
-/* Insert image behind the text that says 'Bay Area' for a nice effect. */
+/* Insert image behind the text that says 'Anywhere' for a nice effect. */
 .bay-area-text {
   text-transform: uppercase;
   background-image: url('/image.jpg');
   font-weight: 900;
   background-size: cover; 
-  background-position: center 30%; 
+  background-position: center 60%; 
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
