@@ -2,8 +2,9 @@ import pandas as pd
 import joblib
 from sqlalchemy import create_engine
 import datetime
+import os
 
-DATABASE_URL = "postgresql://postgres:Abhinavk11#@db.ezcvriynjmielevtvzaf.supabase.co:5432/postgres"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def migrate_data():
     print("Loading data and ML models...")
