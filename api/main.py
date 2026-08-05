@@ -291,8 +291,9 @@ def get_market_feed():
     # 3. Format the data into JSON
     feed_data = []
     for car in cars:
+        clean_name = f"{car.year} {car.make} {car.model}".strip()
         feed_data.append({
-            "name": str(car.name),
+            "name": clean_name,
             "location": clean_location(car.location),
             "list_price": float(car.price),
             "ai_price": float(car.predicted_price),
