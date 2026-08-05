@@ -282,43 +282,20 @@ def get_market_feed():
     def clean_location(loc):
         loc = str(loc).lower().strip()
 
-        # Bay Area location slugs, mapped back to their proper display names.
+        # Replace common misspellings or abbreviations with proper city names
         replacements = {
-            'southsanfrancisco': 'South San Francisco',
-            'sanjosedowntown': 'San Jose Downtown',
-            'sanjose': 'San Jose',
-            'sanfrancisco': 'San Francisco',
-            'santaclara': 'Santa Clara',
-            'sanleandro': 'San Leandro',
-            'sanbruno': 'San Bruno',
-            'sanmateo': 'San Mateo',
-            'santarosa': 'Santa Rosa',
-            'sancarlos': 'San Carlos',
-            'walnutcreek': 'Walnut Creek',
-            'castrovalley': 'Castro Valley',
-            'dalycity': 'Daly City',
-            'mountainview': 'Mountain View',
-            'redwoodcity': 'Redwood City',
-            'unioncity': 'Union City',
-            'losgatos': 'Los Gatos',
-            'pleasanthill': 'Pleasant Hill',
-            'elcerrito': 'El Cerrito',
-            'halfmoonbay': 'Half Moon Bay',
-            'napacounty': 'Napa County',
-            'hayesvalley': 'Hayes Valley',
-            'eastbayarea': 'East Bay Area',
-            'willowglen': 'Willow Glen',
-            'losaltos': 'Los Altos',
-            'oaklandeast': 'Oakland East',
-            'sananselmo': 'San Anselmo',
-            'bernalheights': 'Bernal Heights',
-            'redwoodshores': 'Red Wood Shores',
-            'santacruz': 'Santa Cruz',
-            'sanrafael': 'San Rafael',
-            'morganhill': 'Morgan Hill',
-            'berkeleynorth': 'Berkeley North',
-            'scottottsvalley': 'Scotts Valley',
-            'scottsvalley': 'Scotts Valley'
+            'sanjose': 'San Jose, CA',
+            'sanfrancisco': 'San Francisco, CA',
+            'losangeles': 'Los Angeles, CA',
+            'newyork': 'New York, NY',
+            'newjersey': 'New Jersey, NY',
+            'longbeach': 'Long Beach, CA',
+            'santaclara': 'Santa Clara, CA',
+            'santabarbara': 'Santa Barbara, CA',
+            'sancarlos': 'San Carlos, CA',
+            'sanbruno': 'San Bruno, CA',
+            'sanmateo': 'San Mateo, CA',
+            'sanleandro': 'San Leandro, CA'
         }
 
         # Check the longest slugs first, so "sanjosedowntown" matches before the shorter "sanjose" substring inside it.
