@@ -287,6 +287,13 @@ function App() {
                     </span>
                   </div>
 
+                  {/* Mileage Top Right*/}
+                  <div className="absolute top-5 right-5 z-20">
+                    <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium">
+                      {car.mileage.toLocaleString()} mi
+                    </span>
+                  </div>
+
                   {/* Faded car icon as a decorative background element */}
                   <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-0">
                     <div className="absolute -top-12 -right-16 opacity-[0.08] blur-[2px] mix-blend-screen group-hover:scale-110 group-hover:opacity-[0.15] group-hover:-translate-x-2 transition-all duration-700 ease-out">
