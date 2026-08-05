@@ -68,7 +68,7 @@ body {
   background-image: url('/image.jpg');
   font-weight: 900;
   background-size: cover; 
-  background-position: center 60%; 
+  background-position: center 59%; 
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
