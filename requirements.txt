@@ -9,4 +9,4 @@ beautifulsoup4
 joblib
 pydantic
 sqlalchemy
-psycopg2-binary
+psycopg2-binaryrequests==2.34.2
