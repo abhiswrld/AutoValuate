@@ -30,6 +30,11 @@ jobs:
       - name: Run Scraper
         run: python scraper/test_scraper.py
 
+      - name: Clean and Upload to DB
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python etl/clean_and_upload.py
+
       - name: Commit and push if data changed
         run: |
           git config --local user.email "action@github.com"
