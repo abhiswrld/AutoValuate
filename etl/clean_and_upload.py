@@ -9,11 +9,19 @@ from sqlalchemy import create_engine
 def clean_and_upload():
     print("Starting ETL Pipeline...")
     
-    # 1. Load Data and Models
-    df = pd.read_csv('../data/raw_listings.csv')
-    model = joblib.load('../api/model.pkl')
-    ohe = joblib.load('../api/ohe.pkl')
-    model_columns = joblib.load('../api/model_columns.pkl')
+    # Dynamically find the project root folder
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    # 1. Load Data and Models using the absolute path
+    raw_path = os.path.join(project_root, 'data', 'raw_listings.csv')
+    model_path = os.path.join(project_root, 'api', 'model.pkl')
+    ohe_path = os.path.join(project_root, 'api', 'ohe.pkl')
+    cols_path = os.path.join(project_root, 'api', 'model_columns.pkl')
+    
+    df = pd.read_csv(raw_path)
+    model = joblib.load(model_path)
+    ohe = joblib.load(ohe_path)
+    model_columns = joblib.load(cols_path)
     
     # 2. Basic Cleaning
     df['location'] = df['location'].astype(str).str.split('/').str[0].str.lower().str.strip()
@@ -123,7 +131,7 @@ def clean_and_upload():
     # Replace the whole table with the fresh, updated dataset
     df.to_sql('cars', engine, if_exists='replace', index=False)
     
-    print(f"✅ ETL Complete! Uploaded {len(df)} cars to Supabase.")
+    print(f"ETL Complete! Uploaded {len(df)} cars to Supabase.")
 
 if __name__ == "__main__":
     clean_and_upload()
