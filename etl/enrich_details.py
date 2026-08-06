@@ -93,9 +93,9 @@ def enrich_database():
 
         condition, title_status = get_car_details(url)
 
-        # Print what we found so you aren't flying blind
+        # Print what we found
         if condition == "BANNED":
-            print(" -> 403 Forbidden detected! Stopping script to protect data.")
+            print(" -> 403 Forbidden detected. Stopping script to protect data.")
             break
         elif condition == "sold":
             print(" -> Sold/Deleted")
