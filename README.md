@@ -16,17 +16,13 @@ Instead of relying on static, pre-cleaned datasets, AutoValuate features a custo
 
 ## Architecture and Pipeline
 
-**1. Data Ingestion**
-A custom Playwright scraper bypasses anti-bot protections and infinite-scroll limitations to extract live listings from Craigslist. Instead of standard pagination, the scraper simulates physical mouse wheel scrolling to trigger the site's virtual DOM. It currently runs on an automated daily CI/CD schedule across 10 major US markets, successfully capturing over 15,000 live listings and growing.
+1. **Data Ingestion** — A custom Playwright scraper bypasses anti-bot protections and infinite-scroll limitations to extract live listings from Craigslist. Instead of standard pagination, the scraper simulates physical mouse wheel scrolling to trigger the site's virtual DOM. It currently runs on an automated daily CI/CD schedule across 10 major US markets, successfully capturing over 15,000 live listings and growing.
 
-**2. Data Processing**
-Raw listing titles (e.g., "2014 Audi A7 Prestige Quattro") are parsed using Regex and custom dictionary-based NLP. The pipeline extracts and structures the Year, Make, and Model, while filtering out extreme price and mileage outliers to ensure dataset integrity.
+2. **Data Processing** — Raw listing titles (e.g., "2014 Audi A7 Prestige Quattro") are parsed using Regex and custom dictionary-based NLP. The pipeline extracts and structures the Year, Make, and Model, while filtering out extreme price and mileage outliers to ensure dataset integrity.
 
-**3. Model Training**
-An XGBoost Regressor is trained on the cleaned dataset. The model evaluates features including age, mileage, make, model, and location to predict fair market value. It currently achieves an R-Squared of 0.69 and a Mean Absolute Error (MAE) of approximately $3,100. The trained model and One-Hot Encoder are exported as `.pkl` artifacts.
+3. **Model Training** — An XGBoost Regressor is trained on the cleaned dataset. The model evaluates features including age, mileage, make, model, and location to predict fair market value. It currently achieves an R-Squared of 0.69 and a Mean Absolute Error (MAE) of approximately $3,100. The trained model and One-Hot Encoder are exported as .pkl artifacts.
 
-**4. Live Inference API**
-A FastAPI backend serves the trained model. Users can paste a live Craigslist URL into the frontend. The backend uses Playwright to scrape that specific posting in real-time, cleans the extracted text, and runs it through the ML model to determine if the car is a "Steal" or "Overpriced".
+4. **Live Inference API** — A FastAPI backend serves the trained model. Users can paste a live Craigslist URL into the frontend. The backend uses Playwright to scrape that specific posting in real-time, cleans the extracted text, and runs it through the ML model to determine if the car is a "Steal" or "Overpriced".
 
 ## Features
 
@@ -39,19 +35,23 @@ A FastAPI backend serves the trained model. Users can paste a live Craigslist UR
 AutoValuate is currently a functional V1 MVP. The following features and improvements are planned for V2 to transform the platform into a full-scale, production-ready application:
 
 ### Infrastructure & MLOps
-- **PostgreSQL Database Integration:** Transitioning from static CSVs to a live cloud database to enable lightning-fast queries and handle 100,000+ records.
-- **Automated ETL Pipeline:** Expanding the GitHub Actions CI/CD to automatically run the scraper, clean the data, and load it into the database daily without manual intervention.
-- **Asynchronous Background Tasks:** Implementing FastAPI BackgroundTasks so live URL evaluations return a ticket instantly, preventing the UI from freezing during heavy Playwright scraping.
+
+- [x] ~~**PostgreSQL Database Integration:** Transitioning from static CSVs to a live cloud database to enable lightning-fast queries and handle 100,000+ records.~~
+- [x] ~~**Automated ETL Pipeline:** Expanding the GitHub Actions CI/CD to automatically run the scraper, clean the data, and load it into the database daily without manual intervention.~~
+- [ ] **Asynchronous Background Tasks:** Implementing FastAPI BackgroundTasks so live URL evaluations return a ticket instantly, preventing the UI from freezing during heavy Playwright scraping.
 
 ### Accuracy & Data Depth
-- **Deep Scraping (Condition & Title Status):** Building a secondary scraper to visit individual listing URLs and extract crucial attributes (Clean/Salvage Title, Condition, Transmission) to feed into XGBoost, aiming to reduce MAE to under $1,500.
-- **Advanced NLP / LLM Integration:** Replacing the hardcoded Make/Model dictionary with a smarter approach using spaCy (Named Entity Recognition) or an LLM API to automatically extract Make, Model, and Trim (e.g., distinguishing a base model Civic from a Civic EX-L) without manual database maintenance.
+
+- [x] ~~**Deep Scraping (Condition & Title Status):** Building a secondary scraper to visit individual listing URLs and extract crucial attributes (Clean/Salvage Title, Condition, Transmission) to feed into XGBoost, aiming to reduce MAE to under $1,500.~~
+- [ ] **Advanced NLP / LLM Integration:** Replacing the hardcoded Make/Model dictionary with a smarter approach using spaCy (Named Entity Recognition) or an LLM API to automatically extract Make, Model, and Trim (e.g., distinguishing a base model Civic from a Civic EX-L) without manual database maintenance.
 
 ### User Experience & Personalization
-- **User Authentication:** Adding Google OAuth and Email/Password login so users have personalized profiles.
-- **Watchlists & Alerts:** Allowing authenticated users to save specific cars to a personal watchlist to track price changes over time.
-- **City Filtering:** Enabling users to select their preferred city/region to dynamically filter the Market Feed.
+
+- [ ] **User Authentication:** Adding Google OAuth and Email/Password login so users have personalized profiles.
+- [ ] **Watchlists & Alerts:** Allowing authenticated users to save specific cars to a personal watchlist to track price changes over time.
+- [ ] **City Filtering:** Enabling users to select their preferred city/region to dynamically filter the Market Feed.
 
 ### Data Visualization
-- **Market Insights Dashboard:** Building out the Insights page with interactive charts (Recharts) showing price depreciation curves by make/model and the visual impact of mileage on price.
-- **Listing Image Integration:** Updating the scraper to capture the actual photos from Craigslist postings and using them as the background for the glassmorphism cards in the Market Feed.
+
+- [ ] **Market Insights Dashboard:** Building out the Insights page with interactive charts (Recharts) showing price depreciation curves by make/model and the visual impact of mileage on price.
+- [ ] **Listing Image Integration:** Updating the scraper to capture the actual photos from Craigslist postings and using them as the background for the glassmorphism cards in the Market Feed.
