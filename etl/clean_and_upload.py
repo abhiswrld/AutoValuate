@@ -129,14 +129,12 @@ def clean_and_upload():
         
     engine = create_engine(DATABASE_URL)
     
-    # Ensure the table exists
-    df.head(0).to_sql('cars', engine, if_exists='replace', index=False)
-    
     # 1. Get all the URLs currently in the database
     print("Checking for existing cars to avoid overwriting enriched data...")
     try:
         existing_urls = pd.read_sql("SELECT url FROM cars", engine)['url'].tolist()
-    except Exception:
+    except Exception as e:
+        print(f"Error occurred while fetching existing URLs: {e}")
         existing_urls = []
         
     # 2. Filter our DataFrame to only include cars we don't already have
