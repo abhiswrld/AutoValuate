@@ -128,10 +128,28 @@ def clean_and_upload():
         return
         
     engine = create_engine(DATABASE_URL)
-    # Replace the whole table with the fresh, updated dataset
-    df.to_sql('cars', engine, if_exists='replace', index=False)
     
-    print(f"ETL Complete! Uploaded {len(df)} cars to Supabase.")
+    # Ensure the table exists
+    df.head(0).to_sql('cars', engine, if_exists='replace', index=False)
+    
+    # 1. Get all the URLs currently in the database
+    print("Checking for existing cars to avoid overwriting enriched data...")
+    try:
+        existing_urls = pd.read_sql("SELECT url FROM cars", engine)['url'].tolist()
+    except Exception:
+        existing_urls = []
+        
+    # 2. Filter our DataFrame to only include cars we don't already have
+    new_cars_df = df[~df['url'].isin(existing_urls)]
+    
+    # 3. Append ONLY the new cars
+    if not new_cars_df.empty:
+        new_cars_df.to_sql('cars', engine, if_exists='append', index=False)
+        print(f"Added {len(new_cars_df)} new cars to Supabase.")
+    else:
+        print("No new cars to add today.")
+        
+    print(f"ETL Complete! Total cars in DB: {len(df)}")
 
 if __name__ == "__main__":
     clean_and_upload()
