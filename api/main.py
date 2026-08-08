@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
 import pandas as pd
 import joblib
@@ -10,6 +10,7 @@ import datetime
 import os
 from fastapi import Response
 from sqlalchemy import create_engine, text
+import uuid
 
 # 1. Initialize the App
 app = FastAPI(title="AutoValuate API")
@@ -42,7 +43,10 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 db_engine = create_engine(DATABASE_URL) if DATABASE_URL else None
 print("Database engine created!")
 
-# 4. Define Input Schemas
+# 4. In-Memory Job Queue for Async Tasks
+jobs = {}
+
+# 5. Define Input Schemas
 class CarData(BaseModel):
     age: int
     make: str
@@ -100,7 +104,7 @@ car_models_dict = {
     'Buick': ['Enclave', 'Encore', 'Envision', 'Lacrosse', 'Regal', 'Lucerne', 'Rendezvous', 'Rainier', 'Terraza', 'Skyhawk', 'Skylark', 'Reatta', 'Electra', 'Century', 'LeSabre', 'Roadmaster', 'Park Avenue', 'Riviera', 'Gran Sport'],
     'Pontiac': ['Grand Prix', 'G6', 'Grand Am', 'Vibe', 'Firebird', 'G8', 'Bonneville', 'G5', 'G3', 'Solstice', 'Torrent', 'Aztek', 'Sunfire', 'Montana', 'Wave', 'Fiero', 'LeMans', 'Tempest', 'Catalina', 'Safari', 'Parisienne', 'GTO'],
     'Saturn': ['Vue', 'Ion', 'Aura', 'Sky', 'Outlook', 'L-Series', 'S-Series', 'SL', 'SC', 'SW', 'LW', 'VUE Red Line', 'VUE Green Line', 'VUE Hybrid', 'VUE Sport', 'VUE XR', 'VUE XE', 'VUE XRE', 'VUE XRS', 'VUE XRT', 'VUE XRV', 'VUE XRW', 'VUE XRX', 'VUE XRY', 'VUE XRZ'],
-    'Bently': ['Continental', 'Flying Spur', 'Mulsanne', 'Arnage', 'Azure', 'Brooklands', 'Turbo R', 'Turbo S', 'Turbo RT', 'Turbo RT Speed', 'Turbo RT Mulliner', 'Turbo RT Le Mans', 'Turbo RT Le Mans Edition', 'Turbo RT Le Mans Edition 2003', 'Turbo RT Le Mans Edition 2004', 'Turbo RT Le Mans Edition 2005', 'Turbo RT Le Mans Edition 2006', 'Turbo RT Le Mans Edition 2007', 'Turbo RT Le Mans Edition 2008', 'Turbo RT Le Mans Edition 2009', 'Turbo RT Le Mans Edition 2010'],
+    'Bentley': ['Continental', 'Flying Spur', 'Mulsanne', 'Arnage', 'Azure', 'Brooklands', 'Turbo R', 'Turbo S', 'Turbo RT', 'Turbo RT Speed', 'Turbo RT Mulliner', 'Turbo RT Le Mans', 'Turbo RT Le Mans Edition', 'Turbo RT Le Mans Edition 2003', 'Turbo RT Le Mans Edition 2004', 'Turbo RT Le Mans Edition 2005', 'Turbo RT Le Mans Edition 2006', 'Turbo RT Le Mans Edition 2007', 'Turbo RT Le Mans Edition 2008', 'Turbo RT Le Mans Edition 2009', 'Turbo RT Le Mans Edition 2010'],
 }
 
 def extract_make(title):
@@ -136,124 +140,152 @@ def predict_price(car: CarData):
     predicted_price = model.predict(final_df)[0]
     return {"predicted_price": float(predicted_price), "currency": "USD"}
 
-@app.post("/evaluate_url")
-def evaluate_url(url_data: URLData):
-    url = url_data.url
-    
-    # 1. Scrape the live URL
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.set_extra_http_headers({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"})
-        
-        try:
-            page.goto(url, timeout=15000)
-            page.wait_for_selector("h1.postingtitle", timeout=10000)
-            html = page.content()
-            soup = BeautifulSoup(html, "html.parser")
-            browser.close()
-        except Exception as e:
-            browser.close()
-            return {"error": f"Failed to scrape URL: {str(e)}"}
-
-    # 2. Extract Title and Price
-    title_tag = soup.find("h1", class_="postingtitle")
-    if not title_tag:
-        return {"error": "Could not find posting title. Is this a valid Craigslist URL?"}
-    
-    # The title usually looks like: "$10,500 2016 Toyota Corolla Sport"
-    # We will use Regex to find the price, and then remove it to get the clean title.
-    full_title_text = title_tag.text.strip()
-    
-    price_match = re.search(r'\$([\d,]+)', full_title_text)
-    if not price_match:
-        return {"error": "Could not find a valid price in the title."}
-    
-    # Clean the price string (e.g., "10,500" -> 10500)
-    price_str = price_match.group(1).replace(',', '')
+def process_url_task(job_id: str, url: str):
     try:
-        listing_price = int(price_str)
-    except ValueError:
-        return {"error": "Invalid price format."}
-
-    # Remove the price from the title string so our NLP doesn't get confused
-    title_text = re.sub(r'\$[\d,]+', '', full_title_text).strip().title()
-
-    # 3. Extract Mileage
-    mileage = None
-    
-    # Target the exact div holding the miles
-    miles_div = soup.find("div", class_="attr auto_miles")
-    
-    if miles_div:
-        # Extract just the value span
-        value_span = miles_div.find("span", class_="valu")
-        if value_span:
-            # Get the text, strip the comma, and convert
-            mileage_str = value_span.text.replace(',', '').strip()
+        # 1. Scrape the live URL
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.set_extra_http_headers({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"})
+            
             try:
-                mileage = float(mileage_str)
+                page.goto(url, timeout=15000)
+                page.wait_for_selector("h1.postingtitle", timeout=10000)
+                html = page.content()
+                soup = BeautifulSoup(html, "html.parser")
+                browser.close()
             except Exception as e:
-                print(f"Mileage parsing error: {e}")
+                browser.close()
+                jobs[job_id] = {"status": "failed", "error": f"Failed to scrape URL: {str(e)}"}
+                return
 
-    # 4. Engineer Features (Make, Model, Year, Age)
-    make = extract_make(title_text)
-    model_name = extract_model(title_text, make)
-    
-    year_match = re.search(r'\b(19[0-9]{2}|20[0-2][0-9])\b', title_text)
-    if not year_match:
-        return {"error": "Could not extract year from title."}
-    
-    year = int(year_match.group(0))
-    age = datetime.datetime.now().year - year
+        # 2. Extract Title and Price
+        title_tag = soup.find("h1", class_="postingtitle")
+        if not title_tag:
+            jobs[job_id] = {"status": "failed", "error": "Could not find posting title."}
+            return
+        
+        full_title_text = title_tag.text.strip()
+        price_match = re.search(r'\$([\d,]+)', full_title_text)
+        if not price_match:
+            jobs[job_id] = {"status": "failed", "error": "Could not find a valid price."}
+            return
+        
+        price_str = price_match.group(1).replace(',', '')
+        try:
+            listing_price = int(price_str)
+        except ValueError:
+            jobs[job_id] = {"status": "failed", "error": "Invalid price format."}
+            return
 
-    # Default location if we can't find it
-    location = "sanjose" 
+        title_text = re.sub(r'\$[\d,]+', '', full_title_text).strip().title()
 
-    if not make or not model_name or not mileage:
-        return {"error": f"Missing data -> Make: {make}, Model: {model_name}, Mileage: {mileage}"}
+        # 3. Extract Mileage
+        mileage = None
+        miles_div = soup.find("div", class_="attr auto_miles")
+        if miles_div:
+            value_span = miles_div.find("span", class_="valu")
+            if value_span:
+                mileage_str = value_span.text.replace(',', '').strip()
+                try:
+                    mileage = float(mileage_str)
+                except:
+                    pass
 
-    # 5. Run through ML Model
-    input_data = {
-        "age": age,
-        "make": make,
-        "model": model_name,
-        "mileage": mileage,
-        "location": location
-    }
-    input_df = pd.DataFrame([input_data])
-    cat_encoded = ohe.transform(input_df[['make', 'model', 'location']])
-    cat_df = pd.DataFrame(cat_encoded, columns=ohe.get_feature_names_out(), index=input_df.index)
-    num_df = input_df[['age', 'mileage']]
-    final_df = pd.concat([num_df, cat_df], axis=1)
-    final_df = final_df.reindex(columns=model_columns, fill_value=0)
-    
-    predicted_price = float(model.predict(final_df)[0])
-    
-    # 6. Calculate the Deal
-    difference = predicted_price - listing_price
-    
-    # Calculate percentage difference (Listing Price vs Predicted Price)
-    pct_diff = (difference / predicted_price) * 100
-    
-    if pct_diff > 10:
-        verdict = "Excellent Deal! (Significantly Underpriced)"
-    elif pct_diff > 3:
-        verdict = "Great Deal! (Underpriced)"
-    elif pct_diff >= -3:
-        verdict = "Fair Market Price"
-    elif pct_diff >= -10:
-        verdict = "Slightly Overpriced"
-    else:
-        verdict = "Overpriced! (Significantly Above Market)"
+        # 4. Extract Condition & Title Status
+        condition = None
+        cond_tag = soup.find('div', class_='attr condition')
+        if cond_tag:
+            cond_span = cond_tag.find('span', class_='valu')
+            if cond_span:
+                condition = cond_span.text.strip()
+                
+        title_status = None
+        title_tag_attr = soup.find('div', class_='attr auto_title_status')
+        if title_tag_attr:
+            title_span = title_tag_attr.find('span', class_='valu')
+            if title_span:
+                title_status = title_span.text.strip()
 
-    return {
-        "listing_title": title_text,
-        "listing_price": listing_price,
-        "predicted_price": predicted_price,
-        "difference": difference,
-        "verdict": verdict
-    }
+
+        # 5. Engineer Features (Make, Model, Year, Age)
+        make = extract_make(title_text)
+        model_name = extract_model(title_text, make)
+        
+        year_match = re.search(r'\b(19[0-9]{2}|20[0-2][0-9])\b', title_text)
+        if not year_match:
+            jobs[job_id] = {"status": "failed", "error": "Could not extract year."}
+            return
+        
+        year = int(year_match.group(0))
+        age = datetime.datetime.now().year - year
+        location = "sanjose" 
+
+        if not make or not model_name or not mileage:
+            jobs[job_id] = {"status": "failed", "error": f"Missing data -> Make: {make}, Model: {model_name}, Mileage: {mileage}"}
+            return
+
+        # 6. Run through ML Model
+        final_cond = condition if condition else "unspecified"
+        final_title = title_status if title_status else "unspecified"
+
+        input_data = {
+            "age": age, 
+            "make": make, 
+            "model": model_name,
+            "mileage": mileage, 
+            "location": location,
+            "condition": final_cond, 
+            "title_status": final_title
+        }
+        input_df = pd.DataFrame([input_data])
+        cat_encoded = ohe.transform(input_df[['make', 'model', 'location', 'condition', 'title_status']])
+        cat_df = pd.DataFrame(cat_encoded, columns=ohe.get_feature_names_out(), index=input_df.index)
+        num_df = input_df[['age', 'mileage']]
+        final_df = pd.concat([num_df, cat_df], axis=1)
+        final_df = final_df.reindex(columns=model_columns, fill_value=0)
+        
+        predicted_price = float(model.predict(final_df)[0])
+        difference = predicted_price - listing_price
+        pct_diff = (difference / predicted_price) * 100
+        
+        if pct_diff > 10:
+            verdict = "Excellent Deal! (Significantly Underpriced)"
+        elif pct_diff > 3:
+            verdict = "Great Deal! (Underpriced)"
+        elif pct_diff >= -3:
+            verdict = "Fair Market Price"
+        elif pct_diff >= -10:
+            verdict = "Slightly Overpriced"
+        else:
+            verdict = "Overpriced! (Significantly Above Market)"
+
+        # 7. Save the result to our in-memory dictionary
+        jobs[job_id] = {
+            "status": "completed",
+            "listing_title": title_text,
+            "listing_price": listing_price,
+            "predicted_price": predicted_price,
+            "difference": difference,
+            "verdict": verdict
+        }
+
+    except Exception as e:
+        jobs[job_id] = {"status": "failed", "error": str(e)}
+
+@app.post("/evaluate_url")
+def evaluate_url(url_data: URLData, background_tasks: BackgroundTasks):
+    url = url_data.url
+    job_id = str(uuid.uuid4())
+    jobs[job_id] = {"status": "pending"}
+    background_tasks.add_task(process_url_task, job_id, url)
+    return {"job_id": job_id}
+
+@app.get("/status/{job_id}")
+def get_status(job_id: str):
+    if job_id in jobs:
+        return jobs[job_id]
+    return {"error": "Job not found"}
 
 @app.get("/feed")
 def get_market_feed():

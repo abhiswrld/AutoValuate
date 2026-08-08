@@ -54,7 +54,9 @@ function App() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [feed, setFeed] = useState([])
-  const [showWipMsg, setShowWipMsg] = useState(false) // Added state for pop-up
+  const [showWipMsg, setShowWipMsg] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [jobId, setJobId] = useState(null)
 
   const fetchFeed = () => {
     axios.get(`${API_URL}/feed`)
@@ -73,18 +75,50 @@ function App() {
     setLoading(true)
     setError('')
     setResult(null)
+    setProgress(0)
 
     try {
+      // 1. Get the Job ID (Instant)
       const response = await axios.post(`${API_URL}/evaluate_url`, { url })
-      if (response.data.error) {
-        setError(response.data.error)
-      } else {
-        setResult(response.data)
-      }
+      const id = response.data.job_id
+      setJobId(id)
+
+      // 2. Start the fake progress bar (randomized 8-12% increments)
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 90) return 90;
+          // Random number between 8 and 12
+          const increment = Math.floor(Math.random() * 5) + 8;
+          return Math.min(prev + increment, 90);
+        })
+      }, 700) // Tick slightly faster (0.7s) to make it feel active
+
+      // 3. Start polling the backend every 2 seconds
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await axios.get(`${API_URL}/status/${id}`)
+          const jobData = statusRes.data
+
+          if (jobData.status === 'completed') {
+            clearInterval(pollInterval)
+            clearInterval(progressInterval)
+            setProgress(100)
+            setTimeout(() => setLoading(false), 500) // Half second delay to see 100%
+            setResult(jobData)
+          } else if (jobData.status === 'failed') {
+            clearInterval(pollInterval)
+            clearInterval(progressInterval)
+            setLoading(false)
+            setError(jobData.error || 'Failed to analyze the URL.')
+          }
+        } catch (err) {
+          console.error("Polling error:", err)
+        }
+      }, 2000)
+
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to analyze. Is your backend running?')
-    } finally {
       setLoading(false)
+      setError('Failed to connect to the server. Is the backend running?')
     }
   }
 
@@ -108,6 +142,13 @@ function App() {
       colorClass: isGoodDeal ? 'text-emerald-300/90' : 'text-rose-300/90',
     }
   }
+
+  // Determine what text to show based on progress
+  let statusText = "Initializing...";
+  if (progress >= 100) statusText = "Getting Result...";
+  else if (progress >= 80) statusText = "Running AI Prediction...";
+  else if (progress >= 40) statusText = "Analyzing Listing...";
+  else if (progress > 0) statusText = "Getting URL...";
 
   return (
     <div className="min-h-screen font-sans relative overflow-hidden">
@@ -177,6 +218,28 @@ function App() {
             {loading ? 'Analyzing...' : 'Analyze →'}
           </button>
         </motion.form>
+
+        {/* Loading Progress Bar */}
+        {loading && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-8 w-full max-w-2xl mx-auto"
+          >
+            <div className="relative w-full bg-gray-800/50 border border-white/10 rounded-lg h-10 overflow-hidden flex items-center justify-center">
+              {/* Progress fill */}
+              <motion.div 
+                className="absolute left-0 top-0 h-full bg-gradient-to-r from-indigo-600 to-purple-600 opacity-40"
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.5, ease: "easeInOut" }}
+              />
+              {/* Status Text (White, bold, all caps, small) */}
+              <span className="relative z-10 text-white font-bold uppercase tracking-widest text-xs">
+                {statusText}
+              </span>
+            </div>
+          </motion.div>
+        )}
 
         {error && (
           <motion.p
