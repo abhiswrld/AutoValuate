@@ -86,7 +86,7 @@ function App() {
       // 2. Start the fake progress bar (randomized 8-12% increments)
       const progressInterval = setInterval(() => {
         setProgress((prev) => {
-          if (prev >= 90) return 90;
+          if (prev >= 90) return 90; 
           // Random number between 8 and 12
           const increment = Math.floor(Math.random() * 5) + 8;
           return Math.min(prev + increment, 90);
