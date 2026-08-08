@@ -2,8 +2,8 @@ name: Enrich Car Details (Condition/Title)
 
 on:
   schedule:
-    # Runs every 4 hours (Midnight, 4am, 8am, 12pm, 4pm, 8pm UTC)
-    - cron: '0 */4 * * *'
+    # Runs every 2 hours at the top of the hour
+    - cron: '0 */2 * * *'
   workflow_dispatch:
 
 jobs:
