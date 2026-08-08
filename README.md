@@ -38,7 +38,7 @@ AutoValuate is currently a functional V1 MVP. The following features and improve
 
 - [x] ~~**PostgreSQL Database Integration:** Transitioning from static CSVs to a live cloud database to enable lightning-fast queries and handle 100,000+ records.~~
 - [x] ~~**Automated ETL Pipeline:** Expanding the GitHub Actions CI/CD to automatically run the scraper, clean the data, and load it into the database daily without manual intervention.~~
-- [ ] **Asynchronous Background Tasks:** Implementing FastAPI BackgroundTasks so live URL evaluations return a ticket instantly, preventing the UI from freezing during heavy Playwright scraping.
+- [x] ~~**Asynchronous Background Tasks:** Implementing FastAPI BackgroundTasks so live URL evaluations return a ticket instantly, preventing the UI from freezing during heavy Playwright scraping.~~
 
 ### Accuracy & Data Depth
 
