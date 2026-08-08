@@ -146,6 +146,9 @@ def predict_price(car: CarData):
 
 def process_url_task(job_id: str, url: str):
     try:
+        if not url.startswith("http") or "craigslist.org" not in url:
+            jobs[job_id] = {"status": "failed", "error": "Not a valid URL. Please paste a full Craigslist listing link."}
+            return
         # 1. Scrape the live URL
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -160,7 +163,7 @@ def process_url_task(job_id: str, url: str):
                 browser.close()
             except Exception as e:
                 browser.close()
-                jobs[job_id] = {"status": "failed", "error": f"Failed to scrape URL: {str(e)}"}
+                jobs[job_id] = {"status": "failed", "error": "Could not reach the listing. It may have been deleted."}
                 return
 
         # 2. Extract Title and Price
