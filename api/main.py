@@ -131,7 +131,11 @@ def extract_model(title, make):
 @app.post("/predict")
 def predict_price(car: CarData):
     input_df = pd.DataFrame([car.model_dump()])
-    cat_encoded = ohe.transform(input_df[['make', 'model', 'location']])
+    # Add condition/title_status to match the new model
+    input_df['condition'] = 'unspecified'
+    input_df['title_status'] = 'unspecified'
+    
+    cat_encoded = ohe.transform(input_df[['make', 'model', 'location', 'condition', 'title_status']])
     cat_df = pd.DataFrame(cat_encoded, columns=ohe.get_feature_names_out(), index=input_df.index)
     num_df = input_df[['age', 'mileage']]
     final_df = pd.concat([num_df, cat_df], axis=1)
