@@ -182,8 +182,8 @@ function App() {
           <h2 className="text-3xl md:text-[3.25rem] font-extrabold tracking-tighter text-white whitespace-nowrap">
             Never overpay for a used car
           </h2>
-          <div className="flex justify-between bay-area-text text-[6rem] md:text-[9.5rem] leading-none mt-1">
-            <span>A</span><span>N</span><span>Y</span><span>&nbsp;</span><span>W</span><span>H</span><span>E</span><span>R</span><span>E</span>
+          <div className="text-[6rem] md:text-[9.5rem] font-black text-white leading-none mt-1 tracking-tighter">
+            PERIOD.
           </div>
         </motion.div>
 

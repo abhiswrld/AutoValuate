@@ -62,18 +62,18 @@ body {
   animation: gradient-shift 4s ease infinite;
 }
 
-/* Insert image behind the text that says 'Anywhere' for a nice effect. */
-.bay-area-text {
-  text-transform: uppercase;
-  background-image: url('/image.jpg');
-  font-weight: 900;
-  background-size: cover; 
-  background-position: center 60%; 
+/* Smooth animated gradient for the 'PERIOD.' text */
+@keyframes text-gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.animated-text {
+  background: linear-gradient(90deg, #818cf8, #c084fc, #818cf8);
+  background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  transform: scaleY(1.7); 
-  transform-origin: top; 
-  margin-bottom: 0.5em; 
+  animation: text-gradient 10s ease infinite;
 }
