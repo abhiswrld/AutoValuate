@@ -8,13 +8,9 @@ from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 from typing import Literal
 
-# Load environment variables from .env
 load_dotenv()
-
-# Initialize Groq Client
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-# Force the LLM to choose from a strict list of categories
 class CarSpecs(BaseModel):
     make: str
     model: str
@@ -24,6 +20,10 @@ def extract_car_specs(title):
     prompt = f"""
     Analyze this Craigslist car title and extract the Make, Model, and Trim category.
     
+    Standardization Rules:
+    - Make: Always use the official full name (e.g., "Chevrolet" not "Chevy", "Volkswagen" not "VW", "Mercedes-Benz" not "Benz").
+    - Model: The base model name without trim designations (e.g., "Civic", not "Civic EX-L").
+    
     Trim Categorization Rules:
     - Base: Standard trims (e.g., LX, SE, S, Base)
     - Sport: Sporty trims (e.g., GT, Sport, TRD Sport, RS)
@@ -31,7 +31,7 @@ def extract_car_specs(title):
     - Touring: Tech/Highway trims (e.g., Touring, Grand Touring)
     - Off-Road: Trail trims (e.g., TRD Off-Road, Rubicon, Z71)
     - Performance: High horsepower (e.g., M, AMG, Hellcat, Type R)
-    - Other: If it clearly does not fit or isn't stated, default to 'Base'.
+    - Other: If it clearly does not fit or isn't stated, default to 'Other'.
     
     Return ONLY valid JSON matching this schema: 
     {{"make": "string", "model": "string", "trim": "Must be one of the exact categories above"}}
@@ -61,19 +61,18 @@ def enrich_trims():
         
     engine = create_engine(DATABASE_URL)
     
-    # Ensure the 'trim' column exists
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS trim TEXT;"))
         conn.commit()
         
-    # Grab 500 cars that haven't been enriched with a trim yet
     with engine.connect() as conn:
-        query = text("SELECT url, name FROM cars WHERE trim IS NULL LIMIT 500")
+        # Grab cars where the LLM hasn't run yet (make is NULL or trim is NULL)
+        query = text("SELECT url, name FROM cars WHERE trim IS NULL OR make IS NULL LIMIT 500")
         result = conn.execute(query)
         cars_to_update = result.fetchall()
         
     total_cars = len(cars_to_update)
-    print(f"Found {total_cars} cars to enrich. Estimated time: {total_cars * 0.5 / 60} minutes.")
+    print(f"Found {total_cars} cars to enrich.")
     
     updated_count = 0
     for i, car in enumerate(cars_to_update):
@@ -85,24 +84,26 @@ def enrich_trims():
         
         if specs:
             with engine.begin() as conn:
+                # UPDATE MAKE, MODEL, AND TRIM!
                 update_query = text("""
                     UPDATE cars 
-                    SET trim = :trim 
+                    SET make = :make, model = :model, trim = :trim 
                     WHERE url = :url
                 """)
                 conn.execute(update_query, {
+                    "make": specs.make.title(), 
+                    "model": specs.model.title(), 
                     "trim": specs.trim.title(), 
                     "url": url
                 })
                 updated_count += 1
         else:
-            # If Groq fails, mark it as 'Error' so we don't get stuck in a loop
             with engine.begin() as conn:
                 conn.execute(text("UPDATE cars SET trim = 'Error' WHERE url = :url"), {"url": url})
                 
         time.sleep(0.2)
 
-    print(f"\nEnrichment Complete! Updated {updated_count} cars with clean Make/Model/Trim.")
+    print(f"\nEnrichment Complete! Updated {updated_count} cars.")
 
 if __name__ == "__main__":
     enrich_trims()
