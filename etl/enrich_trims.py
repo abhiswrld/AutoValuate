@@ -2,17 +2,19 @@ import os
 import time
 import json
 import pandas as pd
-from typing import Literal
 from groq import Groq
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+from typing import Literal
 
 # Load environment variables from .env
 load_dotenv()
 
 # Initialize Groq Client
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
+# Force the LLM to choose from a strict list of categories
 class CarSpecs(BaseModel):
     make: str
     model: str
@@ -20,22 +22,20 @@ class CarSpecs(BaseModel):
 
 def extract_car_specs(title):
     prompt = f"""
-    Analyze this Craigslist car title and extract the Make, Model, and Trim tier.
-
-    Trim Tier Rules:
-    - Base: Standard trims (e.g., LX, SE, S) or no trim stated at all.
+    Analyze this Craigslist car title and extract the Make, Model, and Trim category.
+    
+    Trim Categorization Rules:
+    - Base: Standard trims (e.g., LX, SE, S, Base)
     - Sport: Sporty trims (e.g., GT, Sport, TRD Sport, RS)
-    - Luxury: Premium/leather trims (e.g., EX-L, Limited, Platinum, Premium)
-    - Touring: Tech/highway trims (e.g., Touring, Grand Touring)
+    - Luxury: Premium/Leather trims (e.g., EX-L, Limited, Platinum, Premium)
+    - Touring: Tech/Highway trims (e.g., Touring, Grand Touring)
     - Off-Road: Trail trims (e.g., TRD Off-Road, Rubicon, Z71)
-    - Performance: High-horsepower trims (e.g., M, AMG, Hellcat, Type R)
-    - Other: A trim is clearly stated but doesn't fit any tier above (rare -- use sparingly).
-
-    If no trim is stated, use "Base", not "Other".
-
-    Return ONLY valid JSON matching this schema:
-    {{"make": "string", "model": "string", "trim": "one of the exact tier names above"}}
-
+    - Performance: High horsepower (e.g., M, AMG, Hellcat, Type R)
+    - Other: If it clearly does not fit or isn't stated, default to 'Base'.
+    
+    Return ONLY valid JSON matching this schema: 
+    {{"make": "string", "model": "string", "trim": "Must be one of the exact categories above"}}
+    
     Title: "{title}"
     """
     
