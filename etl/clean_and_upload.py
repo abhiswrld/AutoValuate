@@ -47,21 +47,31 @@ def clean_and_upload():
     df['age'] = current_year - df['year']
     df = df.dropna(subset=['age', 'make', 'model', 'mileage', 'location', 'price', 'url'])
     
-    # 7. ML Inference
-    print("Running ML predictions...")
-    df['condition'] = 'unspecified'
-    df['title_status'] = 'unspecified'
+       # 7. ML Inference (Only run on LLM-enriched cars)
+    print("Running ML predictions on LLM-enriched cars...")
+    # Filter for cars that the LLM has successfully processed
+    enriched_df = df[(df['make'].notna()) & (df['trim'].notna()) & (df['trim'] != 'Error')].copy()
     
-    input_df = df[['age', 'make', 'model', 'trim', 'mileage', 'location', 'condition', 'title_status']]
-    cat_encoded = ohe.transform(input_df[['make', 'model', 'trim', 'location', 'condition', 'title_status']])
-    cat_df = pd.DataFrame(cat_encoded, columns=ohe.get_feature_names_out(), index=input_df.index)
-    num_df = input_df[['age', 'mileage']]
-    final_df = pd.concat([num_df, cat_df], axis=1)
-    final_df = final_df.reindex(columns=model_columns, fill_value=0)
-    
-    df['predicted_price'] = model.predict(final_df)
-    df['difference'] = df['predicted_price'] - df['price']
-    
+    if not enriched_df.empty:
+        enriched_df['condition'] = enriched_df['condition'].fillna('unspecified')
+        enriched_df['title_status'] = enriched_df['title_status'].fillna('unspecified')
+        
+        input_df = enriched_df[['age', 'make', 'model', 'trim', 'mileage', 'location', 'condition', 'title_status']]
+        cat_encoded = ohe.transform(input_df[['make', 'model', 'trim', 'location', 'condition', 'title_status']])
+        cat_df = pd.DataFrame(cat_encoded, columns=ohe.get_feature_names_out(), index=input_df.index)
+        num_df = input_df[['age', 'mileage']]
+        final_df = pd.concat([num_df, cat_df], axis=1)
+        final_df = final_df.reindex(columns=model_columns, fill_value=0)
+        
+        enriched_df['predicted_price'] = model.predict(final_df)
+        enriched_df['difference'] = enriched_df['predicted_price'] - enriched_df['price']
+        
+        # Only upload the enriched cars to the 'cars' table
+        cars_to_upload = enriched_df
+    else:
+        print("No enriched cars to upload yet.")
+        cars_to_upload = pd.DataFrame()
+        
     # 8. Upload to Supabase
     print("Uploading to Supabase...")
     DATABASE_URL = os.getenv("DATABASE_URL")
@@ -71,21 +81,17 @@ def clean_and_upload():
         
     engine = create_engine(DATABASE_URL)
     
-    # 1. Get all the URLs currently in the database
     print("Checking for existing cars to avoid overwriting enriched data...")
     try:
         existing_urls = pd.read_sql("SELECT url FROM cars", engine)['url'].tolist()
-    except Exception as e:
-        print(f"Error occurred while fetching existing URLs: {e}")
+    except Exception:
         existing_urls = []
         
-    # 2. Filter our DataFrame to only include cars we don't already have
-    new_cars_df = df[~df['url'].isin(existing_urls)]
+    new_cars_df = cars_to_upload[~cars_to_upload['url'].isin(existing_urls)]
     
-    # 3. Append ONLY the new cars
     if not new_cars_df.empty:
         new_cars_df.to_sql('cars', engine, if_exists='append', index=False)
-        print(f"Added {len(new_cars_df)} new cars to Supabase.")
+        print(f"Added {len(new_cars_df)} new enriched cars to Supabase.")
     else:
         print("No new cars to add today.")
         
