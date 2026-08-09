@@ -11,3 +11,5 @@ pydantic
 sqlalchemy
 psycopg2-binary
 requests==2.34.2
+groq
+python-dotenv
