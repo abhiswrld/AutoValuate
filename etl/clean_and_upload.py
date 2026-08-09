@@ -52,8 +52,8 @@ def clean_and_upload():
     df['condition'] = 'unspecified'
     df['title_status'] = 'unspecified'
     
-    input_df = df[['age', 'make', 'model', 'mileage', 'location', 'condition', 'title_status']]
-    cat_encoded = ohe.transform(input_df[['make', 'model', 'location', 'condition', 'title_status']])
+    input_df = df[['age', 'make', 'model', 'trim', 'mileage', 'location', 'condition', 'title_status']]
+    cat_encoded = ohe.transform(input_df[['make', 'model', 'trim', 'location', 'condition', 'title_status']])
     cat_df = pd.DataFrame(cat_encoded, columns=ohe.get_feature_names_out(), index=input_df.index)
     num_df = input_df[['age', 'mileage']]
     final_df = pd.concat([num_df, cat_df], axis=1)
