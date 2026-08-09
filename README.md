@@ -43,7 +43,7 @@ AutoValuate is currently a functional V1 MVP. The following features and improve
 ### Accuracy & Data Depth
 
 - [x] ~~**Deep Scraping (Condition & Title Status):** Building a secondary scraper to visit individual listing URLs and extract crucial attributes (Clean/Salvage Title, Condition, Transmission) to feed into XGBoost, aiming to reduce MAE to under $1,500.~~
-- [ ] **Advanced NLP / LLM Integration:** Replacing the hardcoded Make/Model dictionary with a smarter approach using spaCy (Named Entity Recognition) or an LLM API to automatically extract Make, Model, and Trim (e.g., distinguishing a base model Civic from a Civic EX-L) without manual database maintenance.
+- [X] ~~**Advanced NLP / LLM Integration:** Replacing the hardcoded Make/Model dictionary with a smarter approach using spaCy (Named Entity Recognition) or an LLM API to automatically extract Make, Model, and Trim (e.g., distinguishing a base model Civic from a Civic EX-L) without manual database maintenance.~~
 
 ### User Experience & Personalization
 
