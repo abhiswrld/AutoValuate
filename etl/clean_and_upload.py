@@ -72,7 +72,7 @@ def clean_and_upload():
         print("No enriched cars to upload yet.")
         cars_to_upload = pd.DataFrame()
         
-    # 8. Upload to Supabase
+        # 8. Upload to Supabase
     print("Uploading to Supabase...")
     DATABASE_URL = os.getenv("DATABASE_URL")
     if not DATABASE_URL:
@@ -88,10 +88,14 @@ def clean_and_upload():
         existing_urls = []
         
     new_cars_df = cars_to_upload[~cars_to_upload['url'].isin(existing_urls)]
+
+    columns_to_upload = ['name', 'url', 'price', 'mileage', 'location', 'region', 'make', 'model', 'trim', 'year', 'age', 'predicted_price', 'difference']
+    cols_present = [col for col in columns_to_upload if col in new_cars_df.columns]
+    new_cars_df = new_cars_df[cols_present]
     
     if not new_cars_df.empty:
         new_cars_df.to_sql('cars', engine, if_exists='append', index=False)
-        print(f"Added {len(new_cars_df)} new enriched cars to Supabase.")
+        print(f"Added {len(new_cars_df)} new enriched cars to Supabase (with region!).")
     else:
         print("No new cars to add today.")
         
