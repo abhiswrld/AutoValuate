@@ -32,6 +32,10 @@ def get_car_details(url):
 
     soup = BeautifulSoup(response.text, 'html.parser')
 
+    if soup.find('div', id='has_been_removed') or soup.find('h2', class_='removed'):
+        print(" -> Sold/Deleted (Author removed posting)")
+        return "sold", "sold"
+
     # Default values if we can't find the data
     condition = None
     title_stats = None
