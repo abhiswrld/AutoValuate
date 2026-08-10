@@ -365,11 +365,11 @@ function App() {
             >
               {region.label}
               <span className={`text-[10px] ${selectedRegion === region.key ? 'text-indigo-200' : 'text-gray-500'}`}>
-                {region.key === 'all' 
-                  ? Object.values(regionCounts).reduce((a, b) => a + b, 0) 
-                  : (regionCounts[region.key] || 0)
-                }
-              </span>
+                  {region.key === 'all' 
+                    ? (regionCounts.total || 0)
+                    : (regionCounts[region.key] || 0)
+                  }
+                </span>
             </button>
           ))}
         </div>
