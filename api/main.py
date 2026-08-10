@@ -303,8 +303,16 @@ def get_region_counts():
     counts = {}
     
     with db_engine.connect() as conn:
+        # 1. Get the total # of all enriched cars
+        total_query = text("""
+            SELECT COUNT(*) FROM cars 
+            WHERE make IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
+        """)
+        total_result = conn.execute(total_query)
+        counts['total'] = total_result.fetchone()[0]
+        
+        # 2. Get the individual regions
         for region in regions:
-            # Count cars that have been processed by LLM
             query = text("""
                 SELECT COUNT(*) FROM cars 
                 WHERE region = :region 
