@@ -6,13 +6,6 @@ from bs4 import BeautifulSoup
 from sqlalchemy import create_engine, text
 
 def get_car_details(url):
-    """
-    Scrapes the car details from a given Craigslist listing URL.
-    
-    Args:
-        url (str): The URL of the Craigslist car listing."""
-
-    # Set a User-Agent so Craigslist thinks we are a real browser
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
     }
@@ -22,10 +15,6 @@ def get_car_details(url):
             return "BANNED", "BANNED"
         if response.status_code in [404, 410]:
             return "sold", "sold"
-            
-        response.raise_for_status()
-    except Exception:
-        return "sold", "sold"
             
         response.raise_for_status()
     except Exception:
@@ -53,7 +42,6 @@ def get_car_details(url):
                 key = key.strip()
                 val = val.strip()
                 
-                # Map the text to our database columns
                 if key == 'condition': data['condition'] = val
                 elif key == 'title status': data['title_status'] = val
                 elif key == 'cylinders': data['cylinders'] = val
@@ -66,14 +54,11 @@ def get_car_details(url):
     makemodel_tag = soup.find('span', class_='valu makemodel')
     if makemodel_tag:
         makemodel_text = makemodel_tag.text.strip()
-        # Split into parts: Make, Model, Trim
         parts = makemodel_text.split()
         
-        # FORCE LOWERCASE for perfect consistency!
         data['make'] = parts[0].lower() if len(parts) > 0 else None
         data['model'] = parts[1].lower() if len(parts) > 1 else None
         
-        # If there's a 3rd word, treat it as the trim. Otherwise, 'unspecified'
         if len(parts) > 2:
             data['trim'] = parts[2].lower()
         else:
@@ -83,20 +68,14 @@ def get_car_details(url):
         data['model'] = None
         data['trim'] = 'unspecified'
 
-    # If condition is missing, mark as unspecified
-    if not data['condition']:
-        data['condition'] = 'unspecified'
-    if not data['title_status']:
-        data['title_status'] = 'unspecified'
+    # Prevent infinite loops: if a spec wasn't found, mark as 'unspecified'
+    for key in ['condition', 'title_status', 'cylinders', 'drive', 'fuel', 'transmission', 'type']:
+        if not data[key]:
+            data[key] = 'unspecified'
 
     return data
 
 def enrich_database():
-    """
-    Enriches the database by scraping car details for each listing in the 'listings' table.
-    Updates the 'condition' and 'title_status' fields in the database.
-    """
-
     print("Starting Database Enrichment Process")
     DATABASE_URL = os.getenv("DATABASE_URL")
     if not DATABASE_URL:
@@ -105,15 +84,21 @@ def enrich_database():
 
     engine = create_engine(DATABASE_URL)
 
-    # Automatically add the columns if they were wiped out by a fresh upload
+    # Automatically add ALL columns if they don't exist yet
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS condition TEXT;"))
         conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS title_status TEXT;"))
+        conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS cylinders TEXT;"))
+        conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS drive TEXT;"))
+        conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS fuel TEXT;"))
+        conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS transmission TEXT;"))
+        conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS type TEXT;"))
+        conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS trim TEXT;"))
         conn.commit()
 
-    # Grab 500 listings from the database
+    # Grab cars where the new deep-scrape features are missing
     with engine.connect() as connection:
-        query = text("SELECT url FROM cars WHERE condition IS NULL ORDER BY url DESC LIMIT 500")
+        query = text("SELECT url FROM cars WHERE cylinders IS NULL ORDER BY url DESC LIMIT 1000")
         result = connection.execute(query)
         cars_to_update = result.fetchall()
 
