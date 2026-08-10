@@ -57,15 +57,31 @@ function App() {
   const [showWipMsg, setShowWipMsg] = useState(false)
   const [progress, setProgress] = useState(0)
   const [jobId, setJobId] = useState(null)
-  const [selectedCity, setSelectedCity] = useState('all')
   const [regionCounts, setRegionCounts] = useState({})
-  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [selectedRegion, setSelectedRegion] = useState('all')
+  const [selectedCity, setSelectedCity] = useState('all')
+  const [availableCities, setAvailableCities] = useState([])
 
-    const fetchFeed = (city = selectedCity) => {
-    axios.get(`${API_URL}/feed?city=${city}`)
+    const fetchFeed = (region = selectedRegion, city = selectedCity) => {
+    axios.get(`${API_URL}/feed?region=${region}&city=${city}`)
       .then(res => setFeed(res.data))
       .catch(err => console.error("Failed to load feed:", err))
   }
+
+  const handleRegionClick = (region) => {
+    setSelectedRegion(region);
+    setSelectedCity('all');
+    fetchFeed(region, 'all');
+    
+    // If a specific region is selected, fetch its sub-cities!
+    if (region !== 'all') {
+      axios.get(`${API_URL}/cities?region=${region}`)
+        .then(res => setAvailableCities(res.data))
+        .catch(err => console.error("Failed to load cities:", err));
+    } else {
+      setAvailableCities([]); // Clear cities if Nationwide is selected
+    }
+  };
 
   useEffect(() => {
     fetchFeed()
@@ -323,8 +339,8 @@ function App() {
 
       {/* Market feed of live listings pulled from the backend */}
       <section id="feed" className="max-w-6xl mx-auto px-6 py-12 border-t border-white/5 relative z-10">
-                {/* City Filter Row (Spaced out to match width of row below) */}
-        <div className="flex justify-between items-center w-full flex-wrap gap-y-2 mb-6">
+        {/* Row 1: Main Regions */}
+        <div className="flex items-center w-full flex-wrap gap-y-2 gap-x-2 mb-4">
           {[
             { key: 'all', label: 'Nationwide' },
             { key: 'sfbay', label: 'Bay Area' },
@@ -337,29 +353,57 @@ function App() {
             { key: 'atlanta', label: 'Atlanta' },
             { key: 'boston', label: 'Boston' },
             { key: 'phoenix', label: 'Phoenix' }
-          ].map((city) => (
+          ].map((region) => (
             <button
-              key={city.key}
-              onClick={() => {
-                setSelectedCity(city.key);
-                fetchFeed(city.key);
-              }}
+              key={region.key}
+              onClick={() => handleRegionClick(region.key)}
               className={`px-4 py-1.5 rounded-full text-sm font-medium transition border flex items-center gap-1.5 ${
-                selectedCity === city.key 
+                selectedRegion === region.key 
                   ? 'bg-indigo-600 text-white border-indigo-500' 
                   : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
               }`}
             >
-              {city.label}
-              <span className={`text-[10px] ${selectedCity === city.key ? 'text-indigo-200' : 'text-gray-500'}`}>
-                {city.key === 'all' 
+              {region.label}
+              <span className={`text-[10px] ${selectedRegion === region.key ? 'text-indigo-200' : 'text-gray-500'}`}>
+                {region.key === 'all' 
                   ? Object.values(regionCounts).reduce((a, b) => a + b, 0) 
-                  : (regionCounts[city.key] || 0)
+                  : (regionCounts[region.key] || 0)
                 }
               </span>
             </button>
           ))}
         </div>
+
+        {/* Row 2: Dynamic Sub-Cities (Only shows if a region is selected) */}
+        {selectedRegion !== 'all' && availableCities.length > 0 && (
+          <div className="flex items-center gap-2 w-full flex-wrap mb-8 pl-2 border-l-2 border-indigo-600/50">
+            <button
+              onClick={() => {
+                setSelectedCity('all');
+                fetchFeed(selectedRegion, 'all');
+              }}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                selectedCity === 'all' ? 'bg-indigo-600/20 text-indigo-300' : 'text-gray-500 hover:text-white'
+              }`}
+            >
+              All Cities
+            </button>
+            {availableCities.map((city) => (
+              <button
+                key={city}
+                onClick={() => {
+                  setSelectedCity(city);
+                  fetchFeed(selectedRegion, city);
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                  selectedCity === city ? 'bg-indigo-600/20 text-indigo-300' : 'text-gray-500 hover:text-white'
+                }`}
+              >
+                {city}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Title and Refresh Row */}
         <div className="flex justify-between items-end mb-8 gap-4">
