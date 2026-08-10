@@ -294,14 +294,35 @@ def get_status(job_id: str):
         return jobs[job_id]
     return {"error": "Job not found"}
 
+@app.get("/regions")
+def get_region_counts():
+    if not db_engine:
+        return {}
+        
+    regions = ['sfbay', 'losangeles', 'newyork', 'seattle', 'chicago', 'dallas', 'miami', 'atlanta', 'boston', 'phoenix']
+    counts = {}
+    
+    with db_engine.connect() as conn:
+        for region in regions:
+            query = text("SELECT COUNT(*) FROM cars WHERE url LIKE :pattern")
+            result = conn.execute(query, {"pattern": f"%{region}.craigslist.org%"})
+            counts[region] = result.fetchone()[0]
+            
+    return counts
+
 @app.get("/feed")
-def get_market_feed():
+def get_market_feed(city: str = "all"):
     if not db_engine:
         return {"error": "Database not configured"}
         
     # 1. Use Pandas to read directly from the database
-    query = "SELECT * FROM cars ORDER BY RANDOM() LIMIT 6"
-    df = pd.read_sql(query, db_engine)
+    # Filter by URL because the scraper stores the main region in the URL!
+    if city != "all":
+        query = text("SELECT * FROM cars WHERE url LIKE :city_pattern ORDER BY RANDOM() LIMIT 6")
+        df = pd.read_sql(query, db_engine, params={"city_pattern": f"%{city}.craigslist.org%"})
+    else:
+        query = text("SELECT * FROM cars ORDER BY RANDOM() LIMIT 6")
+        df = pd.read_sql(query, db_engine)
 
     # 2. Clean up the location names for the UI
     def clean_location(loc):
@@ -316,20 +337,25 @@ def get_market_feed():
             'sancarlos': 'San Carlos, CA',
             'sanbruno': 'San Bruno, CA',
             'sanmateo': 'San Mateo, CA',
-            'sanleandro': 'San Leandro, CA'
+            'sanleandro': 'San Leandro, CA',
+            'seattle': 'Seattle, WA',
+            'chicago': 'Chicago, IL',
+            'dallas': 'Dallas, TX',
+            'miami': 'Miami, FL',
+            'atlanta': 'Atlanta, GA',
+            'boston': 'Boston, MA',
+            'phoenix': 'Phoenix, AZ'
         }
         for wrong, right in replacements.items():
             if wrong in loc:
                 return right
         return loc.title()
 
-    # 2. Format the data into JSON
+    # 3. Format the data into JSON
     feed_data = []
     for _, row in df.iterrows():
-        # Construct a perfectly clean name
         clean_name = f"{row.get('year', '')} {row.get('make', '')} {row.get('model', '')}".strip()
         
-        # Safely get mileage (handle NaN)
         mileage = row.get('mileage', 0)
         if pd.isna(mileage):
             mileage = 0
