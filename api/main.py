@@ -304,65 +304,62 @@ def get_region_counts():
     
     with db_engine.connect() as conn:
         for region in regions:
-            # Only count cars that the LLM has successfully processed
+            # Count cars that have been processed by LLM
             query = text("""
                 SELECT COUNT(*) FROM cars 
-                WHERE url LIKE :pattern 
+                WHERE region = :region 
                 AND make IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
             """)
-            result = conn.execute(query, {"pattern": f"%{region}.craigslist.org%"})
+            result = conn.execute(query, {"region": region})
             counts[region] = result.fetchone()[0]
             
     return counts
 
+@app.get("/cities")
+def get_cities(region: str):
+    if not db_engine:
+        return []
+        
+    # Return a list of unique sub-cities for the selected region
+    query = text("""
+        SELECT DISTINCT location 
+        FROM cars 
+        WHERE region = :region 
+        AND make IS NOT NULL
+    """)
+    with db_engine.connect() as conn:
+        result = conn.execute(query, {"region": region})
+        cities = [row[0].title() for row in result.fetchall() if row[0]]
+        
+    return cities
+
 @app.get("/feed")
-def get_market_feed(city: str = "all"):
+def get_market_feed(region: str = "all", city: str = "all"):
     if not db_engine:
         return {"error": "Database not configured"}
         
-    # 1. Filter by city, AND ensure the LLM has actually processed the car!
+    # 1. Filter by region AND sub-city!
+    base_query = """
+        SELECT * FROM cars 
+        WHERE make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL
+    """
+    params = {}
+    
+    if region != "all":
+        base_query += " AND region = :region"
+        params["region"] = region
+        
     if city != "all":
-        query = text("""
-            SELECT * FROM cars 
-            WHERE url LIKE :city_pattern 
-            AND make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL
-            ORDER BY RANDOM() LIMIT 6
-        """)
-        df = pd.read_sql(query, db_engine, params={"city_pattern": f"%{city}.craigslist.org%"})
-    else:
-        query = text("""
-            SELECT * FROM cars 
-            WHERE make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL
-            ORDER BY RANDOM() LIMIT 6
-        """)
-        df = pd.read_sql(query, db_engine)
+        base_query += " AND location = :city"
+        params["city"] = city.lower()
+        
+    base_query += " ORDER BY RANDOM() LIMIT 6"
+    
+    df = pd.read_sql(text(base_query), db_engine, params=params)
 
     # 2. Clean up the location names for the UI
     def clean_location(loc):
-        loc = str(loc).lower().strip()
-        replacements = {
-            'sanjose': 'San Jose, CA',
-            'sanfrancisco': 'San Francisco, CA',
-            'losangeles': 'Los Angeles, CA',
-            'newyork': 'New York, NY',
-            'longbeach': 'Long Beach, CA',
-            'santaclara': 'Santa Clara, CA',
-            'sancarlos': 'San Carlos, CA',
-            'sanbruno': 'San Bruno, CA',
-            'sanmateo': 'San Mateo, CA',
-            'sanleandro': 'San Leandro, CA',
-            'seattle': 'Seattle, WA',
-            'chicago': 'Chicago, IL',
-            'dallas': 'Dallas, TX',
-            'miami': 'Miami, FL',
-            'atlanta': 'Atlanta, GA',
-            'boston': 'Boston, MA',
-            'phoenix': 'Phoenix, AZ'
-        }
-        for wrong, right in replacements.items():
-            if wrong in loc:
-                return right
-        return loc.title()
+        return str(loc).title()
 
     # 3. Format the data into JSON
     feed_data = []
