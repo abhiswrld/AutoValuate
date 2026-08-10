@@ -12,13 +12,13 @@ def get_car_details(url):
     try:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 403:
-            return "BANNED", "BANNED"
+            return "BANNED"
         if response.status_code in [404, 410]:
-            return "sold", "sold"
+            return "sold"
             
         response.raise_for_status()
     except Exception:
-        return "sold", "sold"
+        return "sold"
 
     soup = BeautifulSoup(response.text, 'html.parser')
 
