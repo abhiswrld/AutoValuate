@@ -16,15 +16,16 @@ def get_car_details(url):
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
     }
-
     try:
         response = requests.get(url, headers=headers, timeout=10)
-        # If we get a 403, we are banned! Return a special flag.
         if response.status_code == 403:
             return "BANNED", "BANNED"
-        # If it's a 404 or 410, the car is sold
         if response.status_code in [404, 410]:
             return "sold", "sold"
+            
+        response.raise_for_status()
+    except Exception:
+        return "sold", "sold"
             
         response.raise_for_status()
     except Exception:
@@ -32,34 +33,63 @@ def get_car_details(url):
 
     soup = BeautifulSoup(response.text, 'html.parser')
 
+    # Check if deleted by author
     if soup.find('div', id='has_been_removed') or soup.find('h2', class_='removed'):
-        print(" -> Sold/Deleted (Author removed posting)")
         return "sold", "sold"
 
-    # Default values if we can't find the data
-    condition = None
-    title_stats = None
+    data = {
+        'condition': None, 'title_status': None, 'cylinders': None,
+        'drive': None, 'fuel': None, 'transmission': None, 'type': None
+    }
 
-    # Extract condition
-    condition_tag = soup.find('div', class_='attr condition')
-    if condition_tag:
-        condition = condition_tag.find('span', class_='valu')
-        if condition:
-            condition = condition.text.strip()
+    # 1. Scrape all attributes from the details page
+    attr_groups = soup.find_all('p', class_='attrgroup')
+    for group in attr_groups:
+        spans = group.find_all('span')
+        for span in spans:
+            text = span.text.strip().lower()
+            if ':' in text:
+                key, val = text.split(':', 1)
+                key = key.strip()
+                val = val.strip()
+                
+                # Map the text to our database columns
+                if key == 'condition': data['condition'] = val
+                elif key == 'title status': data['title_status'] = val
+                elif key == 'cylinders': data['cylinders'] = val
+                elif key == 'drive': data['drive'] = val
+                elif key == 'fuel': data['fuel'] = val
+                elif key == 'transmission': data['transmission'] = val
+                elif key == 'type': data['type'] = val
 
-    # Extract title status
-    title_stats_tag = soup.find('div', class_='attr auto_title_status')
-    if title_stats_tag:
-        title_stats = title_stats_tag.find('span', class_='valu')
-        if title_stats:
-            title_stats = title_stats.text.strip()
+    # 2. Scrape the perfect Make/Model/Trim from the span
+    makemodel_tag = soup.find('span', class_='valu makemodel')
+    if makemodel_tag:
+        makemodel_text = makemodel_tag.text.strip()
+        # Split into parts: Make, Model, Trim
+        parts = makemodel_text.split()
+        
+        # FORCE LOWERCASE for perfect consistency!
+        data['make'] = parts[0].lower() if len(parts) > 0 else None
+        data['model'] = parts[1].lower() if len(parts) > 1 else None
+        
+        # If there's a 3rd word, treat it as the trim. Otherwise, 'unspecified'
+        if len(parts) > 2:
+            data['trim'] = parts[2].lower()
+        else:
+            data['trim'] = 'unspecified'
+    else:
+        data['make'] = None
+        data['model'] = None
+        data['trim'] = 'unspecified'
 
-    # If the page loaded fine but seller didn't fill out the condition, mark as 'unspecified'
-    # This prevents the main loop from marking live cars as 'sold'
-    final_cond = condition if condition else "unspecified"
-    final_title = title_stats if title_stats else "unspecified"
+    # If condition is missing, mark as unspecified
+    if not data['condition']:
+        data['condition'] = 'unspecified'
+    if not data['title_status']:
+        data['title_status'] = 'unspecified'
 
-    return final_cond, final_title
+    return data
 
 def enrich_database():
     """
@@ -95,30 +125,41 @@ def enrich_database():
         url = car[0]
         print(f"[{i+1}/{total_cars}] Scraping: {url}")
 
-        condition, title_status = get_car_details(url)
+        details = get_car_details(url)
 
-        # Print what we found
-        if condition == "BANNED":
+        if details == "BANNED":
             print(" -> 403 Forbidden detected. Stopping script to protect data.")
             break
-        elif condition == "sold":
+        elif details == "sold":
             print(" -> Sold/Deleted")
+            with engine.begin() as conn:
+                conn.execute(text("UPDATE cars SET condition = 'sold', title_status = 'sold' WHERE url = :url"), {"url": url})
         else:
-            print(f" -> Success: Condition: {condition}, Title: {title_status}")
-
-        # Update specific car entry in the database
-        with engine.begin() as conn:
-            update_query = text("""
-                UPDATE cars 
-                SET condition = :cond, title_status = :title 
-                WHERE url = :url
-            """)
-            conn.execute(update_query, {"cond": condition, "title": title_status, "url": url})
-            
-            if condition != "sold":
+            print(f" -> Success: {details.get('make')} {details.get('model')} {details.get('trim')}")
+            with engine.begin() as conn:
+                update_query = text("""
+                    UPDATE cars 
+                    SET condition = :cond, title_status = :title, 
+                        cylinders = :cyl, drive = :drive, fuel = :fuel, 
+                        transmission = :trans, type = :type,
+                        make = :make, model = :model, trim = :trim
+                    WHERE url = :url
+                """)
+                conn.execute(update_query, {
+                    "cond": details.get('condition'),
+                    "title": details.get('title_status'),
+                    "cyl": details.get('cylinders'),
+                    "drive": details.get('drive'),
+                    "fuel": details.get('fuel'),
+                    "trans": details.get('transmission'),
+                    "type": details.get('type'),
+                    "make": details.get('make'),
+                    "model": details.get('model'),
+                    "trim": details.get('trim'),
+                    "url": url
+                })
                 updated_count += 1
 
-        # Sleep for 1 second to avoid overwhelming the server
         time.sleep(1)
     
     # Clean up dead listings to keep the database fast and accurate
