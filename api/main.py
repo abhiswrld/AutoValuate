@@ -304,7 +304,12 @@ def get_region_counts():
     
     with db_engine.connect() as conn:
         for region in regions:
-            query = text("SELECT COUNT(*) FROM cars WHERE url LIKE :pattern")
+            # Only count cars that the LLM has successfully processed
+            query = text("""
+                SELECT COUNT(*) FROM cars 
+                WHERE url LIKE :pattern 
+                AND make IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
+            """)
             result = conn.execute(query, {"pattern": f"%{region}.craigslist.org%"})
             counts[region] = result.fetchone()[0]
             
@@ -315,13 +320,21 @@ def get_market_feed(city: str = "all"):
     if not db_engine:
         return {"error": "Database not configured"}
         
-    # 1. Use Pandas to read directly from the database
-    # Filter by URL because the scraper stores the main region in the URL!
+    # 1. Filter by city, AND ensure the LLM has actually processed the car!
     if city != "all":
-        query = text("SELECT * FROM cars WHERE url LIKE :city_pattern ORDER BY RANDOM() LIMIT 6")
+        query = text("""
+            SELECT * FROM cars 
+            WHERE url LIKE :city_pattern 
+            AND make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL
+            ORDER BY RANDOM() LIMIT 6
+        """)
         df = pd.read_sql(query, db_engine, params={"city_pattern": f"%{city}.craigslist.org%"})
     else:
-        query = text("SELECT * FROM cars ORDER BY RANDOM() LIMIT 6")
+        query = text("""
+            SELECT * FROM cars 
+            WHERE make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL
+            ORDER BY RANDOM() LIMIT 6
+        """)
         df = pd.read_sql(query, db_engine)
 
     # 2. Clean up the location names for the UI
