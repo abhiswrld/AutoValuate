@@ -2,3 +2,4 @@ venv/
 .DS_Store
 migrate_to_db.py
 .env
+test_groq.py
