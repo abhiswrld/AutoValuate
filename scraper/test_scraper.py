@@ -46,6 +46,7 @@ def scrape_craigslist():
                 for listing in listings:
                     data = extract_listing_data(listing)
                     if data:
+                        data['region'] = region
                         all_cars_data.append(data)
                 
                 # 3. Scroll down using the MOUSE WHEEL
@@ -115,10 +116,10 @@ def extract_listing_data(listing):
     if not location_tag:
         return None
 
+    # Clean up the sub-city (e.g., "san jose downtown" -> "San Jose Downtown")
     location = location_tag.text.strip().lower()
 
-
-    # 5. Create and return dictionary
+    # 6. Create and return dictionary
     vehicle_stats = {
         "name": title_text,
         "url": url,
