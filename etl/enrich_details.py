@@ -32,23 +32,22 @@ def get_car_details(url):
     }
 
     # 1. Scrape all attributes from the details page
-    attr_groups = soup.find_all('p', class_='attrgroup')
-    for group in attr_groups:
-        spans = group.find_all('span')
-        for span in spans:
-            text = span.text.strip().lower()
-            if ':' in text:
-                key, val = text.split(':', 1)
-                key = key.strip()
-                val = val.strip()
-                
-                if key == 'condition': data['condition'] = val
-                elif key == 'title status': data['title_status'] = val
-                elif key == 'cylinders': data['cylinders'] = val
-                elif key == 'drive': data['drive'] = val
-                elif key == 'fuel': data['fuel'] = val
-                elif key == 'transmission': data['transmission'] = val
-                elif key == 'type': data['type'] = val
+    attr_divs = soup.find_all('div', class_='attr')
+    for div in attr_divs:
+        labl = div.find('span', class_='labl')
+        valu = div.find('span', class_='valu')
+        
+        if labl and valu:
+            key = labl.text.strip().lower().replace(':', '').strip()
+            val = valu.text.strip().lower()
+            
+            if key == 'condition': data['condition'] = val
+            elif key == 'title status': data['title_status'] = val
+            elif key == 'cylinders': data['cylinders'] = val
+            elif key == 'drive': data['drive'] = val
+            elif key == 'fuel': data['fuel'] = val
+            elif key == 'transmission': data['transmission'] = val
+            elif key == 'type': data['type'] = val
 
     # 2. Scrape the perfect Make/Model/Trim from the span
     makemodel_tag = soup.find('span', class_='valu makemodel')
