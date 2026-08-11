@@ -47,11 +47,9 @@ def clean_and_upload():
     df['age'] = current_year - df['year']
     df = df.dropna(subset=['age', 'make', 'model', 'mileage', 'location', 'price', 'url'])
     
-    # 7. ML Inference (Only run on LLM-enriched cars)
-    print("Uploading raw listings to Supabase for LLM processing...")
-    
-    # We don't run ML inference here anymore because the cars don't have trims yet.
-    # We will create a separate script to run ML inference AFTER the LLM finishes.
+    # 7. Upload Raw Listings to Supabase
+    # The raw CSV doesn't have 'make' or 'trim' yet. We upload them as NULLs.
+    print("Uploading raw listings to Supabase for deep-scraper processing...")
     cars_to_upload = df.copy()
         
     # 8. Upload to Supabase
@@ -78,7 +76,7 @@ def clean_and_upload():
     
     if not new_cars_df.empty:
         new_cars_df.to_sql('cars', engine, if_exists='append', index=False)
-        print(f"Added {len(new_cars_df)} new raw cars to Supabase. Waiting for LLM enrichment...")
+        print(f"Added {len(new_cars_df)} new raw cars to Supabase. Waiting for deep-scraper enrichment...")
     else:
         print("No new cars to add today.")
         
