@@ -295,6 +295,15 @@ def get_market_feed(region: str = "all", city: str = "all"):
     def clean_location(loc):
         return str(loc).title()
 
+    # Helper function to safely convert to float and handle NaN
+    def safe_float(val):
+        try:
+            f = float(val)
+            # If it's NaN, return 0.0
+            return f if not pd.isna(f) else 0.0
+        except:
+            return 0.0
+
     feed_data = []
     for _, row in df.iterrows():
         clean_name = f"{row.get('year', '')} {row.get('make', '')} {row.get('model', '')}".strip()
