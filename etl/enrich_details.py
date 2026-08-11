@@ -74,6 +74,33 @@ def get_car_details(url):
         if not data[key]:
             data[key] = 'unspecified'
 
+    # 3. Extract location of car.
+    valid_makes = ['toyota', 'honda', 'ford', 'chevrolet', 'chevy', 'nissan', 'bmw', 'mercedes', 'benz', 'audi', 'lexus', 'subaru', 'volkswagen', 
+                   'vw', 'hyundai', 'kia', 'mazda', 'acura', 'jeep', 'dodge', 'ram', 'gmc', 'cadillac', 'infiniti', 'volvo', 'mitsubishi', 'mini', 
+                   'porsche', 'tesla', 'land', 'jaguar', 'chrysler', 'buick', 'pontiac', 'saturn', 'bentley', 'fiat']
+    
+    try:
+        url_path = url.split('/view/d/')[1]
+        parts = url_path.split('-')
+        
+        clean_city_parts = []
+        for part in parts:
+            # Stop if we hit a number (like '2006')
+            if any(char.isdigit() for char in part):
+                break
+            # Stop if we hit a car make (like 'toyota')
+            if part.lower() in valid_makes:
+                break
+            # Otherwise, it's part of the city name
+            clean_city_parts.append(part)
+            
+        if clean_city_parts:
+            # Join them with a space so 'santa-clara' becomes 'santa clara'
+            clean_city = ' '.join(clean_city_parts)
+            data['location'] = clean_city.lower()
+    except:
+        pass
+
     return data
 
 def enrich_database():
