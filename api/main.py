@@ -266,7 +266,6 @@ def get_market_feed(region: str = "all", city: str = "all"):
     if not db_engine:
         return {"error": "Database not configured"}
         
-    # OPTIMIZED QUERY: Fast random selection without sorting the whole table
     base_query = """
         SELECT * FROM cars 
         WHERE make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL
@@ -281,8 +280,6 @@ def get_market_feed(region: str = "all", city: str = "all"):
         base_query += " AND location = :city"
         params["city"] = city.lower()
         
-    # Use TABLESAMPLE to grab 100 random rows quickly, then pick 6 from that.
-    # This is 1000x faster than ORDER BY RANDOM() on large tables.
     base_query += " LIMIT 100"
     
     df = pd.read_sql(text(base_query), db_engine, params=params)
@@ -292,33 +289,26 @@ def get_market_feed(region: str = "all", city: str = "all"):
     elif len(df) == 0:
         return []
 
+    # Force these columns to be numeric, convert all NaN/Infinity to 0
+    df['price'] = pd.to_numeric(df['price'], errors='coerce').fillna(0)
+    df['predicted_price'] = pd.to_numeric(df['predicted_price'], errors='coerce').fillna(0)
+    df['difference'] = pd.to_numeric(df['difference'], errors='coerce').fillna(0)
+    df['mileage'] = pd.to_numeric(df['mileage'], errors='coerce').fillna(0)
+
     def clean_location(loc):
         return str(loc).title()
-
-    # Helper function to safely convert to float and handle NaN
-    def safe_float(val):
-        try:
-            f = float(val)
-            # If it's NaN, return 0.0
-            return f if not pd.isna(f) else 0.0
-        except:
-            return 0.0
 
     feed_data = []
     for _, row in df.iterrows():
         clean_name = f"{row.get('year', '')} {row.get('make', '')} {row.get('model', '')}".strip()
-        
-        mileage = row.get('mileage', 0)
-        if pd.isna(mileage):
-            mileage = 0
             
         feed_data.append({
             "name": clean_name,
-            "mileage": int(mileage),
+            "mileage": int(row['mileage']),
             "location": clean_location(row.get('location', 'unknown')),
-            "list_price": float(row.get('price', 0)),
-            "ai_price": float(row.get('predicted_price', 0)),
-            "difference": float(row.get('difference', 0)),
+            "list_price": float(row['price']),
+            "ai_price": float(row['predicted_price']),
+            "difference": float(row['difference']),
             "url": str(row.get('url', '#'))
         })
         
