@@ -339,8 +339,8 @@ function App() {
 
       {/* Market feed of live listings pulled from the backend */}
       <section id="feed" className="max-w-6xl mx-auto px-6 py-12 border-t border-white/5 relative z-10">
-        {/* Row 1: Main Regions */}
-        <div className="flex items-center w-full flex-wrap gap-y-2 gap-x-2 mb-4">
+      {/* Row 1: Main Regions */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
           {[
             { key: 'all', label: 'Nationwide' },
             { key: 'sfbay', label: 'Bay Area' },
@@ -357,7 +357,7 @@ function App() {
             <button
               key={region.key}
               onClick={() => handleRegionClick(region.key)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition border flex items-center gap-1.5 ${
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition border flex items-center gap-1.5 shrink-0 ${
                 selectedRegion === region.key 
                   ? 'bg-indigo-600 text-white border-indigo-500' 
                   : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
@@ -365,11 +365,11 @@ function App() {
             >
               {region.label}
               <span className={`text-[10px] ${selectedRegion === region.key ? 'text-indigo-200' : 'text-gray-500'}`}>
-                  {region.key === 'all' 
-                    ? (regionCounts.total || 0)
-                    : (regionCounts[region.key] || 0)
-                  }
-                </span>
+                {region.key === 'all' 
+                  ? (regionCounts.total || 0) 
+                  : (regionCounts[region.key] || 0)
+                }
+              </span>
             </button>
           ))}
         </div>
