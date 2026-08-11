@@ -4,6 +4,11 @@ import time
 import requests
 from bs4 import BeautifulSoup
 from sqlalchemy import create_engine, text
+import joblib
+from dotenv import load_dotenv
+
+# Load environment variables from .env file for the ENTIRE script
+load_dotenv() 
 
 def get_car_details(url):
     headers = {
@@ -24,7 +29,7 @@ def get_car_details(url):
 
     # Check if deleted by author
     if soup.find('div', id='has_been_removed') or soup.find('h2', class_='removed'):
-        return "sold", "sold"
+        return "sold"
 
     data = {
         'condition': None, 'title_status': None, 'cylinders': None,
@@ -106,6 +111,11 @@ def get_car_details(url):
             data['location'] = clean_city.lower()
     except:
         pass
+
+    # Prevent infinite loops: if a spec wasn't found, mark as 'unspecified'
+    for key in ['condition', 'title_status', 'cylinders', 'drive', 'fuel', 'transmission', 'type']:
+        if not data[key]:
+            data[key] = 'unspecified'
 
     return data
 
@@ -189,5 +199,62 @@ def enrich_database():
 
     print(f"Enrichment process completed. Updated {updated_count} out of {total_cars} cars.")
 
+def update_ai_prices():
+    print("\nCalculating AI prices for newly scraped cars...")
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    try:
+        model = joblib.load(os.path.join(project_root, 'api', 'model.pkl'))
+        ohe = joblib.load(os.path.join(project_root, 'api', 'ohe.pkl'))
+        model_columns = joblib.load(os.path.join(project_root, 'api', 'model_columns.pkl'))
+    except Exception as e:
+        print(f"Could not load ML models: {e}")
+        return
+        
+    engine = create_engine(os.getenv("DATABASE_URL"))
+    
+    # Grab cars that have perfect specs, but no predicted price yet
+    with engine.connect() as conn:
+        query = text("""
+            SELECT * FROM cars 
+            WHERE predicted_price IS NULL AND make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL
+            LIMIT 500
+        """)
+        df = pd.read_sql(query, conn)
+        
+    if df.empty:
+        print("No cars need AI pricing right now.")
+        return
+        
+    # Clean data for ML
+    df['age'] = pd.to_numeric(df.get('age', 10), errors='coerce').fillna(10)
+    cat_cols = ['condition', 'title_status', 'trim', 'cylinders', 'drive', 'fuel', 'transmission', 'type', 'location']
+    for col in cat_cols:
+        df[col] = df[col].fillna('unspecified')
+        
+    features = ['age', 'make', 'model', 'trim', 'mileage', 'location', 'condition', 
+                'title_status', 'cylinders', 'drive', 'fuel', 'transmission', 'type']
+    X = df[features]
+    
+    cat_encoded = ohe.transform(X[['make', 'model', 'trim', 'location', 'condition', 'title_status', 'cylinders', 'drive', 'fuel', 'transmission', 'type']])
+    cat_df = pd.DataFrame(cat_encoded, columns=ohe.get_feature_names_out(), index=X.index)
+    num_df = X[['age', 'mileage']]
+    final_df = pd.concat([num_df, cat_df], axis=1)
+    final_df = final_df.reindex(columns=model_columns, fill_value=0)
+    
+    # Predict!
+    preds = model.predict(final_df)
+    
+    # Update database
+    with engine.begin() as conn:
+        for i, row in df.iterrows():
+            pred = float(preds[i])
+            diff = pred - float(row['price'])
+            conn.execute(text("UPDATE cars SET predicted_price = :pred, difference = :diff WHERE url = :url"), {
+                "pred": pred, "diff": diff, "url": row['url']
+            })
+    print(f"Updated AI prices for {len(df)} cars.")
+
 if __name__ == "__main__":
     enrich_database()
+    update_ai_prices()
