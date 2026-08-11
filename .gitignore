@@ -3,3 +3,4 @@ venv/
 migrate_to_db.py
 .env
 test_groq.py
+__pycache__/
