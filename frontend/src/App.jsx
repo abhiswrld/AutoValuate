@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import axios from 'axios'
+import { supabase } from './supabaseClient'
 
 // Car icon, built from separate wheel, body, and window layers
 const CarIcon = ({ className = "w-10 h-10 shrink-0" }) => (
@@ -61,8 +62,15 @@ function App() {
   const [selectedRegion, setSelectedRegion] = useState('all')
   const [selectedCity, setSelectedCity] = useState('all')
   const [availableCities, setAvailableCities] = useState([])
+  
+  // Auth States
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [authMode, setAuthMode] = useState('signin')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [user, setUser] = useState(null)
 
-    const fetchFeed = (region = selectedRegion, city = selectedCity) => {
+  const fetchFeed = (region = selectedRegion, city = selectedCity) => {
     axios.get(`${API_URL}/feed?region=${region}&city=${city}`)
       .then(res => setFeed(res.data))
       .catch(err => console.error("Failed to load feed:", err))
@@ -73,23 +81,63 @@ function App() {
     setSelectedCity('all');
     fetchFeed(region, 'all');
     
-    // If a specific region is selected, fetch its sub-cities!
     if (region !== 'all') {
       axios.get(`${API_URL}/cities?region=${region}`)
         .then(res => setAvailableCities(res.data))
         .catch(err => console.error("Failed to load cities:", err));
     } else {
-      setAvailableCities([]); // Clear cities if Nationwide is selected
+      setAvailableCities([]);
     }
   };
 
+  // FIXED: Clean, async useEffect that won't crash the app
   useEffect(() => {
+    // 1. Fetch initial UI data
     fetchFeed()
-    // Fetch the live car counts for each region
     axios.get(`${API_URL}/regions`)
       .then(res => setRegionCounts(res.data))
       .catch(err => console.error("Failed to load region counts:", err))
+
+    // 2. Check Supabase Auth session (Async)
+    const checkUser = async () => {
+      try {
+        const { data } = await supabase.auth.getSession()
+        setUser(data?.session?.user || null)
+      } catch (error) {
+        console.error("Error getting session:", error)
+      }
+    }
+    checkUser()
+
+    // 3. Listen for auth changes (Login/Logout)
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user || null)
+      }
+    )
+
+    // 4. Cleanup listener on unmount
+    return () => {
+      authListener.subscription.unsubscribe()
+    }
   }, [])
+
+  const handleAuth = async (e) => {
+    e.preventDefault()
+    if (authMode === 'signup') {
+      const { error } = await supabase.auth.signUp({ email, password })
+      if (error) alert(error.message)
+      else alert('Check your email for the confirmation link!')
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) alert(error.message)
+      else setShowAuthModal(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+  }
 
   const handleAnalyze = async (e) => {
     e.preventDefault()
@@ -101,22 +149,18 @@ function App() {
     setProgress(0)
 
     try {
-      // 1. Get the Job ID (Instant)
       const response = await axios.post(`${API_URL}/evaluate_url`, { url })
       const id = response.data.job_id
       setJobId(id)
 
-      // 2. Start the fake progress bar (randomized 8-12% increments)
       const progressInterval = setInterval(() => {
         setProgress((prev) => {
           if (prev >= 90) return 90; 
-          // Random number between 8 and 12
           const increment = Math.floor(Math.random() * 5) + 8;
           return Math.min(prev + increment, 90);
         })
-      }, 700) // Tick slightly faster (0.7s) to make it feel active
+      }, 700)
 
-      // 3. Start polling the backend every 2 seconds
       const pollInterval = setInterval(async () => {
         try {
           const statusRes = await axios.get(`${API_URL}/status/${id}`)
@@ -126,7 +170,7 @@ function App() {
             clearInterval(pollInterval)
             clearInterval(progressInterval)
             setProgress(100)
-            setTimeout(() => setLoading(false), 500) // Half second delay to see 100%
+            setTimeout(() => setLoading(false), 500)
             setResult(jobData)
           } else if (jobData.status === 'failed') {
             clearInterval(pollInterval)
@@ -166,7 +210,6 @@ function App() {
     }
   }
 
-  // Determine what text to show based on progress
   let statusText = "Initializing...";
   if (progress >= 100) statusText = "Getting Result...";
   else if (progress >= 80) statusText = "Running AI Prediction...";
@@ -185,13 +228,17 @@ function App() {
         </h1>
         <div className="flex items-center space-x-8 text-base font-medium text-gray-400">
           <a href="#feed" className="hover:text-white transition">Feed</a>
-          {/* Updated Insights link */}
           <a href="#" onClick={(e) => { e.preventDefault(); setShowWipMsg(true) }} className="hover:text-white transition">Insights</a>
           <a href={`${API_URL}/docs`} target="_blank" rel="noreferrer" className="hover:text-white transition">API</a>
-          {/* Updated Login button */}
-          <button onClick={() => setShowWipMsg(true)} className="px-4 py-1.5 bg-white/5 border border-white/10 text-white hover:bg-white/10 transition rounded-lg text-base">
-            Login
-          </button>
+          {user ? (
+            <button onClick={handleLogout} className="px-4 py-1.5 bg-white/5 border border-white/10 text-white hover:bg-white/10 transition rounded-lg text-base">
+              Logout
+            </button>
+          ) : (
+            <button onClick={() => { setAuthMode('signin'); setShowAuthModal(true) }} className="px-4 py-1.5 bg-white/5 border border-white/10 text-white hover:bg-white/10 transition rounded-lg text-base">
+              Login
+            </button>
+          )}
         </div>
       </nav>
 
@@ -242,7 +289,6 @@ function App() {
           </button>
         </motion.form>
 
-        {/* Loading Progress Bar */}
         {loading && (
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
@@ -250,13 +296,11 @@ function App() {
             className="mt-8 w-full max-w-2xl mx-auto"
           >
             <div className="relative w-full bg-gray-800/50 border border-white/10 rounded-lg h-10 overflow-hidden flex items-center justify-center">
-              {/* Progress fill */}
               <motion.div 
                 className="absolute left-0 top-0 h-full bg-gradient-to-r from-indigo-600 to-purple-600 opacity-40"
                 animate={{ width: `${progress}%` }}
                 transition={{ duration: 0.5, ease: "easeInOut" }}
               />
-              {/* Status Text (White, bold, all caps, small) */}
               <span className="relative z-10 text-white font-bold uppercase tracking-widest text-xs">
                 {statusText}
               </span>
@@ -274,7 +318,6 @@ function App() {
         )}
       </header>
 
-      {/* Analysis result card, only rendered once a listing has been evaluated */}
       <AnimatePresence>
         {result && (
           <motion.section
@@ -297,7 +340,6 @@ function App() {
                     <p className="text-3xl font-bold text-white">${result.listing_price.toLocaleString()}</p>
                   </div>
 
-                  {/* Animated beam connecting listed price to predicted price */}
                   <div className="flex-1 mx-8 relative flex items-center justify-center overflow-hidden h-15">
                     <div className="absolute w-full h-[2px] bg-white/10 rounded-full" />
 
@@ -321,7 +363,6 @@ function App() {
                 </div>
               </div>
 
-              {/* Verdict banner, colored by how far the listing is from predicted value */}
               <div className={`px-8 py-5 ${getVerdictBgColor(result.difference)}`}>
                 <p className="text-xs uppercase tracking-widest text-black/60 mb-1 font-bold">Verdict</p>
                 <p className="text-xl font-extrabold text-black mb-0.5">
@@ -337,9 +378,8 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* Market feed of live listings pulled from the backend */}
       <section id="feed" className="max-w-6xl mx-auto px-6 py-12 border-t border-white/5 relative z-10">
-      {/* Row 1: Main Regions */}
+        {/* Row 1: Main Regions */}
         <div className="flex items-center w-full gap-2 overflow-x-auto mb-4 whitespace-nowrap scrollbar-hide">
           {[
             { key: 'all', label: 'Nationwide' },
@@ -374,7 +414,7 @@ function App() {
           ))}
         </div>
 
-        {/* Row 2: Dynamic Sub-Cities (Only shows if a region is selected) */}
+        {/* Row 2: Dynamic Sub-Cities */}
         {selectedRegion !== 'all' && availableCities.length > 0 && (
           <div className="flex items-center gap-2 w-full flex-wrap mb-8 pl-2 border-l-2 border-indigo-600/50">
             <button
@@ -440,14 +480,12 @@ function App() {
                     </span>
                   </div>
 
-                  {/* Mileage Top Right*/}
                   <div className="absolute top-5 right-5 z-20">
                     <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium">
                       {car.mileage.toLocaleString()} mi
                     </span>
                   </div>
 
-                  {/* Faded car icon as a decorative background element */}
                   <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-0">
                     <div className="absolute -top-12 -right-16 opacity-[0.08] blur-[2px] mix-blend-screen group-hover:scale-110 group-hover:opacity-[0.15] group-hover:-translate-x-2 transition-all duration-700 ease-out">
                       <CarIcon className="w-80 h-80 scale-x-[-1]" />
@@ -494,7 +532,7 @@ function App() {
         </div>
       </footer>
 
-      {/* Work in Progress Pop-up Toast (Top Right) */}
+      {/* Work in Progress Pop-up Toast */}
       <AnimatePresence>
         {showWipMsg && (
           <motion.div 
@@ -506,6 +544,64 @@ function App() {
           >
             <span>This feature is a work in progress!</span>
             <button onClick={() => setShowWipMsg(false)} className="text-gray-400 hover:text-white">✕</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Auth Modal */}
+      <AnimatePresence>
+        {showAuthModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowAuthModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-[#111] border border-white/10 rounded-2xl p-8 max-w-md w-full shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-2xl font-bold mb-6 text-white text-center">
+                {authMode === 'signin' ? 'Welcome Back' : 'Create Account'}
+              </h3>
+              <form onSubmit={handleAuth} className="space-y-4">
+                <input 
+                  type="email" 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Email" 
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 text-white rounded-lg focus:outline-none focus:border-indigo-500"
+                  required
+                />
+                <input 
+                  type="password" 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Password" 
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 text-white rounded-lg focus:outline-none focus:border-indigo-500"
+                  required
+                />
+                <button 
+                  type="submit"
+                  className="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-500 transition"
+                >
+                  {authMode === 'signin' ? 'Sign In' : 'Sign Up'}
+                </button>
+              </form>
+              <p className="text-center text-sm text-gray-400 mt-6">
+                {authMode === 'signin' ? "Don't have an account? " : "Already have an account? "}
+                <button 
+                  onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
+                  className="text-indigo-400 hover:underline font-medium"
+                >
+                  {authMode === 'signin' ? 'Sign Up' : 'Sign In'}
+                </button>
+              </p>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
