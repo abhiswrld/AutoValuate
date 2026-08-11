@@ -50,8 +50,38 @@ jobs = {}
 class URLData(BaseModel):
     url: str
 
-# --- HELPER FUNCTIONS (No Dictionary!) ---
-valid_makes = ['toyota', 'honda', 'ford', 'chevrolet', 'chevy', 'nissan', 'bmw', 'mercedes', 'benz', 'audi', 'lexus', 'subaru', 'volkswagen', 'vw', 'hyundai', 'kia', 'mazda', 'acura', 'jeep', 'dodge', 'ram', 'gmc', 'cadillac', 'infiniti', 'volvo', 'mitsubishi', 'mini', 'porsche', 'tesla', 'land', 'jaguar', 'chrysler', 'buick', 'pontiac', 'saturn', 'bentley', 'fiat']
+valid_makes = ['toyota', 'honda', 'ford', 'chevrolet', 'chevy', 'nissan', 'bmw', 'mercedes', 'benz', 'audi', 'lexus', 'subaru', 'volkswagen', 'vw', 
+               'hyundai', 'kia', 'mazda', 'acura', 'jeep', 'dodge', 'ram', 'gmc', 'cadillac', 'infiniti', 'volvo', 'mitsubishi', 'mini', 'porsche', 
+               'tesla', 'land', 'jaguar', 'chrysler', 'buick', 'pontiac', 'saturn', 'bentley', 'fiat']
+
+# Helper to format car names nicely (e.g., "toyota rav4" -> "Toyota RAV4")
+def format_car_name(year, make, model, trim=None):
+    y = str(year).strip() if year else ""
+    m = make.title() if make else ""
+    mo = model.title() if model else ""
+    t = trim.title() if trim and trim != 'unspecified' else ""
+    
+    # List of models/trims that should be fully uppercase
+    uppercase_acronyms = [
+        "Rav4", "Cr-V", "Crv", "Hr-V", "Hrv", "Cr-Z", "Crz", 
+        "Nx", "Rx", "Gs", "Is", "Gx", "Lx", "Ls", "Es", "Ux", "Rc", 
+        "Mdx", "Rdx", "Tlx", "Ilx", "Tsx", "Rsx", "Rlx", "Zdx", "Nsx",
+        "Gti", "Amg", "Se", "Le", "Xle", "Ex", "Sxt", "Rt", "Gt", "Gts",
+        "Srt", "Suv", "Awg", "4wd", "2wd", "Rwd", "Fwd", "Trd"
+    ]
+    
+    # Replace acronyms in model and trim
+    for acr in uppercase_acronyms:
+        if mo == acr:
+            mo = acr.upper()
+        if t == acr:
+            t = acr.upper()
+            
+    name = f"{y} {m} {mo}".strip()
+    if t:
+        name += f" {t}"
+        
+    return name.strip()
 
 def extract_specs_from_soup(soup):
     """Extracts all perfect features from the Craigslist details page HTML."""
@@ -300,7 +330,7 @@ def get_market_feed(region: str = "all", city: str = "all"):
 
     feed_data = []
     for _, row in df.iterrows():
-        clean_name = f"{row.get('year', '')} {row.get('make', '')} {row.get('model', '')}".strip()
+        clean_name = format_car_name(row.get('year'), row.get('make'), row.get('model'), row.get('trim'))
             
         feed_data.append({
             "name": clean_name,
