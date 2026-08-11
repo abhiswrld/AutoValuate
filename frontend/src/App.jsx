@@ -340,7 +340,7 @@ function App() {
       {/* Market feed of live listings pulled from the backend */}
       <section id="feed" className="max-w-6xl mx-auto px-6 py-12 border-t border-white/5 relative z-10">
       {/* Row 1: Main Regions */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+        <div className="flex items-center w-full gap-2 overflow-x-auto pb-2 mb-4 whitespace-nowrap">
           {[
             { key: 'all', label: 'Nationwide' },
             { key: 'sfbay', label: 'Bay Area' },
