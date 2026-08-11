@@ -31,6 +31,10 @@ def get_car_details(url):
         'drive': None, 'fuel': None, 'transmission': None, 'type': None
     }
 
+    valid_makes = ['toyota', 'honda', 'ford', 'chevrolet', 'chevy', 'nissan', 'bmw', 'mercedes', 'benz', 'mercedes-benz', 'audi', 'lexus', 'subaru', 'volkswagen', 
+                       'vw', 'hyundai', 'kia', 'mazda', 'acura', 'jeep', 'dodge', 'ram', 'gmc', 'cadillac', 'infiniti', 'volvo', 'mitsubishi', 'mini', 
+                       'porsche', 'tesla', 'land', 'jaguar', 'chrysler', 'buick', 'pontiac', 'saturn', 'bentley', 'fiat']
+
     # 1. Scrape all attributes from the details page
     attr_divs = soup.find_all('div', class_='attr')
     for div in attr_divs:
@@ -49,17 +53,32 @@ def get_car_details(url):
             elif key == 'transmission': data['transmission'] = val
             elif key == 'type': data['type'] = val
 
-    # 2. Scrape the perfect Make/Model/Trim from the span
-    makemodel_tag = soup.find('span', class_='valu makemodel')
-    if makemodel_tag:
-        makemodel_text = makemodel_tag.text.strip()
+    # 2. Scrape the perfect Make/Model/Trim (Checks for <a> tag or <span> text)
+    makemodel_text = None
+    
+    # Try to find the <a> tag inside the span first
+    makemodel_a = soup.select_one('span.valu.makemodel a')
+    if makemodel_a:
+        makemodel_text = makemodel_a.text.strip()
+    else:
+        # Fallback: Just grab the text from the span directly
+        makemodel_span = soup.find('span', class_='valu makemodel')
+        if makemodel_span:
+            makemodel_text = makemodel_span.text.strip()
+            
+    # Parse the text if we found it
+    if makemodel_text:
         parts = makemodel_text.split()
         
-        data['make'] = parts[0].lower() if len(parts) > 0 else None
-        data['model'] = parts[1].lower() if len(parts) > 1 else None
-        
-        if len(parts) > 2:
-            data['trim'] = parts[2].lower()
+        # VALIDATION: Check if the first word is a real make
+        if len(parts) > 0 and parts[0].lower() in valid_makes:
+            data['make'] = parts[0].lower()
+            data['model'] = parts[1].lower() if len(parts) > 1 else 'unspecified'
+            
+            if len(parts) > 2:
+                data['trim'] = parts[2].lower()
+            else:
+                data['trim'] = 'unspecified'
         else:
             data['make'] = None
             data['model'] = None
@@ -69,33 +88,20 @@ def get_car_details(url):
         data['model'] = None
         data['trim'] = 'unspecified'
 
-    # Prevent infinite loops: if a spec wasn't found, mark as 'unspecified'
-    for key in ['condition', 'title_status', 'cylinders', 'drive', 'fuel', 'transmission', 'type']:
-        if not data[key]:
-            data[key] = 'unspecified'
-
-    # 3. Extract location of car.
-    valid_makes = ['toyota', 'honda', 'ford', 'chevrolet', 'chevy', 'nissan', 'bmw', 'mercedes', 'benz', 'audi', 'lexus', 'subaru', 'volkswagen', 
-                   'vw', 'hyundai', 'kia', 'mazda', 'acura', 'jeep', 'dodge', 'ram', 'gmc', 'cadillac', 'infiniti', 'volvo', 'mitsubishi', 'mini', 
-                   'porsche', 'tesla', 'land', 'jaguar', 'chrysler', 'buick', 'pontiac', 'saturn', 'bentley', 'fiat']
-    
+    # 3. Extract City from the URL (Stops at year OR car make!)
     try:
         url_path = url.split('/view/d/')[1]
         parts = url_path.split('-')
         
         clean_city_parts = []
         for part in parts:
-            # Stop if we hit a number (like '2006')
             if any(char.isdigit() for char in part):
                 break
-            # Stop if we hit a car make (like 'toyota')
             if part.lower() in valid_makes:
                 break
-            # Otherwise, it's part of the city name
             clean_city_parts.append(part)
             
         if clean_city_parts:
-            # Join them with a space so 'santa-clara' becomes 'santa clara'
             clean_city = ' '.join(clean_city_parts)
             data['location'] = clean_city.lower()
     except:
