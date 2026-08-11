@@ -61,6 +61,8 @@ def get_car_details(url):
         if len(parts) > 2:
             data['trim'] = parts[2].lower()
         else:
+            data['make'] = None
+            data['model'] = None
             data['trim'] = 'unspecified'
     else:
         data['make'] = None
