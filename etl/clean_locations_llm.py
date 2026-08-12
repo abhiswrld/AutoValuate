@@ -18,12 +18,11 @@ def clean_locations():
         
     print(f"Found {len(locations)} unique locations. Asking LLM to clean them in batches...")
     
-    # Break the list into chunks of 150
     chunk_size = 150
     all_mappings = {}
     
     for i in range(0, len(locations), chunk_size):
-        chunk = locations[i:i + chunk_size]
+        chunk = [loc.replace('"', '').replace("'", "") for loc in locations[i:i+chunk_size]]
         print(f"Processing batch {i//chunk_size + 1}/{(len(locations) + chunk_size - 1)//chunk_size}...")
         
         prompt = f"""
@@ -36,8 +35,10 @@ def clean_locations():
         - Convert Craigslist codes to real names (e.g., "eby" -> "east bay", "sby" -> "south bay", "pen" -> "peninsula", "sfc" -> "san francisco").
         - Remove state abbreviations (e.g., "oakland ca" -> "oakland").
         - If it's already a clean city, just make it lowercase.
+        - Fix spacing issues as well (oaklandeast -> oakland east), and if an entry doesn't seem like a city, convert its value to the exact string "null".
         
         Return ONLY a valid JSON object mapping the original string to the cleaned string.
+        Ensure there are no trailing periods or commas inside the JSON keys or values.
         Example: {{"san jose downtown": "san jose", "eby": "east bay"}}
         
         Here is the list: {json.dumps(chunk)}
@@ -45,7 +46,7 @@ def clean_locations():
         
         try:
             response = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
             )
@@ -58,10 +59,13 @@ def clean_locations():
         
     print(f"LLM returned {len(all_mappings)} total mappings. Updating database...")
     
-    # Update the database with the cleaned names
     updated_count = 0
     with engine.begin() as conn:
         for original, cleaned in all_mappings.items():
+            # FIX: Handle cases where LLM returned JSON null (Python None)
+            if cleaned is None or not isinstance(cleaned, str):
+                cleaned = "null"
+                
             if original != cleaned:
                 conn.execute(text("UPDATE cars SET location = :clean WHERE location = :original"), {
                     "clean": cleaned.lower(), 
