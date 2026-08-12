@@ -284,6 +284,7 @@ def get_cities(region: str):
         FROM cars 
         WHERE region = :region 
         AND make IS NOT NULL
+        AND length(location) > 2 
     """)
     with db_engine.connect() as conn:
         result = conn.execute(query, {"region": region})
