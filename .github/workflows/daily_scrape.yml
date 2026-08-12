@@ -2,8 +2,8 @@ name: Daily Craigslist Scrape
 
 on:
   schedule:
-    # Runs every day at 10:00 AM Pacific Time (17:00 UTC)
-    - cron: '0 17 * * *'
+    # Runs every 12 hours (Midnight and Noon UTC)
+    - cron: '0 */12 * * *'
   workflow_dispatch:
 
 jobs:
