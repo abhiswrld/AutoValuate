@@ -63,12 +63,15 @@ function App() {
   const [selectedCity, setSelectedCity] = useState('all')
   const [availableCities, setAvailableCities] = useState([])
   
-  // Auth States
+  // Auth & Watchlist States
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authMode, setAuthMode] = useState('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [user, setUser] = useState(null)
+  const [watchlist, setWatchlist] = useState([])
+  const [showWatchlist, setShowWatchlist] = useState(false)
+  const [watchlistCars, setWatchlistCars] = useState([])
 
   const fetchFeed = (region = selectedRegion, city = selectedCity) => {
     axios.get(`${API_URL}/feed?region=${region}&city=${city}`)
@@ -90,33 +93,50 @@ function App() {
     }
   };
 
-  // FIXED: Clean, async useEffect that won't crash the app
+  const fetchWatchlist = async (userId) => {
+    const { data, error } = await supabase
+      .from('watchlist')
+      .select('car_url')
+      .eq('user_id', userId)
+    
+    if (!error && data) {
+      setWatchlist(data.map(item => item.car_url))
+    }
+  }
+
   useEffect(() => {
-    // 1. Fetch initial UI data
     fetchFeed()
     axios.get(`${API_URL}/regions`)
       .then(res => setRegionCounts(res.data))
       .catch(err => console.error("Failed to load region counts:", err))
 
-    // 2. Check Supabase Auth session (Async)
     const checkUser = async () => {
       try {
         const { data } = await supabase.auth.getSession()
-        setUser(data?.session?.user || null)
+        const currentUser = data?.session?.user || null
+        setUser(currentUser)
+        
+        if (currentUser) {
+          fetchWatchlist(currentUser.id)
+        }
       } catch (error) {
         console.error("Error getting session:", error)
       }
     }
     checkUser()
 
-    // 3. Listen for auth changes (Login/Logout)
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        setUser(session?.user || null)
+        const currentUser = session?.user || null
+        setUser(currentUser)
+        if (currentUser) {
+          fetchWatchlist(currentUser.id)
+        } else {
+          setWatchlist([])
+        }
       }
     )
 
-    // 4. Cleanup listener on unmount
     return () => {
       authListener.subscription.unsubscribe()
     }
@@ -137,6 +157,48 @@ function App() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
+  }
+
+  const handleShowWatchlist = async () => {
+    if (showWatchlist) {
+      setShowWatchlist(false)
+      fetchFeed()
+      return
+    }
+
+    if (watchlist.length === 0) {
+      alert("You haven't saved any cars yet!")
+      return
+    }
+
+    try {
+      const response = await axios.post(`${API_URL}/watchlist`, watchlist)
+      setWatchlistCars(response.data)
+      setShowWatchlist(true)
+    } catch (err) {
+      console.error("Failed to load watchlist:", err)
+    }
+  }
+
+  const toggleSaveCar = async (carUrl) => {
+    if (!user) {
+      alert("Please log in to save cars to your watchlist.")
+      return
+    }
+
+    if (watchlist.includes(carUrl)) {
+      setWatchlist(watchlist.filter(url => url !== carUrl))
+      await supabase
+        .from('watchlist')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('car_url', carUrl)
+    } else {
+      setWatchlist([...watchlist, carUrl])
+      await supabase
+        .from('watchlist')
+        .insert([{ user_id: user.id, car_url: carUrl }])
+    }
   }
 
   const handleAnalyze = async (e) => {
@@ -447,80 +509,120 @@ function App() {
 
         {/* Title and Refresh Row */}
         <div className="flex justify-between items-end mb-8 gap-4">
-          <h3 className="text-3xl font-bold tracking-tight text-white">Market Feed</h3>
-          <button
-            onClick={() => fetchFeed()}
-            className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:text-white transition rounded-lg text-sm font-medium shrink-0"
-          >
-            <RefreshIcon className="w-4 h-4" />
-            Refresh Feed
-          </button>
+          <div className="flex items-center gap-4">
+            <h3 className="text-3xl font-bold tracking-tight text-white">
+              {showWatchlist ? "My Saved Cars" : "Market Feed"}
+            </h3>
+            {user && (
+              <button 
+                onClick={handleShowWatchlist}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition border flex items-center gap-2 ${
+                  showWatchlist 
+                    ? 'bg-indigo-600 text-white border-indigo-500' 
+                    : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <svg className="w-4 h-4" fill={showWatchlist ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                Saved ({watchlist.length})
+              </button>
+            )}
+          </div>
+          
+          {!showWatchlist && (
+            <button
+              onClick={() => fetchFeed()}
+              className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:text-white transition rounded-lg text-sm font-medium shrink-0"
+            >
+              <RefreshIcon className="w-4 h-4" />
+              Refresh Feed
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {feed && feed.length > 0 ? (
-            feed.map((car, i) => {
-              const diff = formatDifference(car.difference)
-              return (
-                <motion.a
-                  key={i}
-                  href={car.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: i * 0.05 }}
-                  whileHover={{ scale: 1.02 }}
-                  className="relative h-96 rounded-2xl overflow-hidden border border-white/10 group cursor-pointer bg-gradient-to-br from-[#0f111a] to-[#0a0a0f] block shadow-lg"
-                >
-                  <div className="absolute top-5 left-5 z-20">
-                    <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium">
-                      <PinIcon className="w-3 h-3" />
-                      {car.location}
-                    </span>
-                  </div>
-
-                  <div className="absolute top-5 right-5 z-20">
-                    <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium">
-                      {car.mileage.toLocaleString()} mi
-                    </span>
-                  </div>
-
-                  <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-0">
-                    <div className="absolute -top-12 -right-16 opacity-[0.08] blur-[2px] mix-blend-screen group-hover:scale-110 group-hover:opacity-[0.15] group-hover:-translate-x-2 transition-all duration-700 ease-out">
-                      <CarIcon className="w-80 h-80 scale-x-[-1]" />
-                    </div>
-                  </div>
-
-                  <div className="absolute inset-0 p-6 flex flex-col justify-end bg-gradient-to-t from-black via-black/60 to-transparent transition-all z-10">
-                    <h4 className="text-2xl font-bold mb-6 text-white tracking-tight">{car.name}</h4>
-
-                    <div className="flex justify-between items-end mb-4">
-                      <div>
-                        <p className="text-xs uppercase tracking-widest text-gray-500 mb-1 font-semibold">Listed Price</p>
-                        <p className="text-3xl font-extrabold text-white">${car.list_price.toLocaleString()}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs uppercase tracking-widest text-indigo-400/80 mb-1 font-semibold">AI Prediction</p>
-                        <p className="text-3xl font-extrabold text-indigo-300">${car.ai_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-2 pt-4 border-t border-white/10 flex justify-center">
-                      <span className={`text-sm font-bold tracking-wide ${diff.colorClass}`}>
-                        {diff.text}
+          {(() => {
+            const carsToShow = showWatchlist ? watchlistCars : feed;
+            
+            if (carsToShow && carsToShow.length > 0) {
+              return carsToShow.map((car, i) => {
+                const diff = formatDifference(car.difference)
+                return (
+                  <motion.a
+                    key={i}
+                    href={car.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: i * 0.05 }}
+                    whileHover={{ scale: 1.02 }}
+                    className="relative h-96 rounded-2xl overflow-hidden border border-white/10 group cursor-pointer bg-gradient-to-br from-[#0f111a] to-[#0a0a0f] block shadow-lg"
+                  >
+                    <div className="absolute top-5 left-5 z-20">
+                      <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium">
+                        <PinIcon className="w-3 h-3" />
+                        {car.location}
                       </span>
                     </div>
-                  </div>
-                </motion.a>
+
+                    {/* Mileage Top Right + Save Button */}
+                    <div className="absolute top-5 right-5 z-20 flex items-center gap-2">
+                      <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium">
+                        {car.mileage.toLocaleString()} mi
+                      </span>
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault()
+                          toggleSaveCar(car.url)
+                        }}
+                        className={`p-1.5 rounded-full border backdrop-blur-md transition ${
+                          watchlist.includes(car.url) 
+                            ? 'bg-indigo-600 border-indigo-500 text-white' 
+                            : 'bg-black/50 border-white/10 text-gray-300 hover:bg-white/10'
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill={watchlist.includes(car.url) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                      </button>
+                    </div>
+
+                    <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-0">
+                      <div className="absolute -top-12 -right-16 opacity-[0.08] blur-[2px] mix-blend-screen group-hover:scale-110 group-hover:opacity-[0.15] group-hover:-translate-x-2 transition-all duration-700 ease-out">
+                        <CarIcon className="w-80 h-80 scale-x-[-1]" />
+                      </div>
+                    </div>
+
+                    <div className="absolute inset-0 p-6 flex flex-col justify-end bg-gradient-to-t from-black via-black/60 to-transparent transition-all z-10">
+                      <h4 className="text-2xl font-bold mb-6 text-white tracking-tight">{car.name}</h4>
+
+                      <div className="flex justify-between items-end mb-4">
+                        <div>
+                          <p className="text-xs uppercase tracking-widest text-gray-500 mb-1 font-semibold">Listed Price</p>
+                          <p className="text-3xl font-extrabold text-white">${car.list_price.toLocaleString()}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs uppercase tracking-widest text-indigo-400/80 mb-1 font-semibold">AI Prediction</p>
+                          <p className="text-3xl font-extrabold text-indigo-300">${car.ai_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 pt-4 border-t border-white/10 flex justify-center">
+                        <span className={`text-sm font-bold tracking-wide ${diff.colorClass}`}>
+                          {diff.text}
+                        </span>
+                      </div>
+                    </div>
+                  </motion.a>
+                )
+              })
+            } else {
+              return (
+                <div className="col-span-3 text-center text-gray-500 py-10 flex justify-center items-center gap-2">
+                  <RefreshIcon className="w-4 h-4 animate-spin opacity-50" />
+                  {showWatchlist ? "No saved cars yet." : "Loading live market deals..."}
+                </div>
               )
-            })
-          ) : (
-            <div className="col-span-3 text-center text-gray-500 py-10 flex justify-center items-center gap-2">
-              <RefreshIcon className="w-4 h-4 animate-spin opacity-50" />
-              Loading live market deals...
-            </div>
-          )}
+            }
+          })()}
         </div>
       </section>
 

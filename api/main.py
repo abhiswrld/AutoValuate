@@ -11,6 +11,7 @@ import os
 from fastapi import Response
 from sqlalchemy import create_engine, text
 import uuid
+from typing import List
 
 # 1. Initialize the App
 app = FastAPI(title="AutoValuate API")
@@ -285,6 +286,8 @@ def get_cities(region: str):
         WHERE region = :region 
         AND make IS NOT NULL
         AND length(location) > 2 
+        AND location != 'null'
+        ORDER BY location ASC
     """)
     with db_engine.connect() as conn:
         result = conn.execute(query, {"region": region})
@@ -337,6 +340,45 @@ def get_market_feed(region: str = "all", city: str = "all"):
             "name": clean_name,
             "mileage": int(row['mileage']),
             "location": clean_location(row.get('location', 'unknown')),
+            "list_price": float(row['price']),
+            "ai_price": float(row['predicted_price']),
+            "difference": float(row['difference']),
+            "url": str(row.get('url', '#'))
+        })
+        
+    return feed_data
+
+@app.post("/watchlist")
+def get_watchlist_cars(urls: List[str]):
+    if not db_engine or not urls:
+        return []
+        
+    # Query the database for only the URLs the user has saved
+    query = text("""
+        SELECT * FROM cars 
+        WHERE url = ANY(:urls)
+        AND make IS NOT NULL
+    """)
+    with db_engine.connect() as conn:
+        result = conn.execute(query, {"urls": urls})
+        df = pd.DataFrame(result.fetchall(), columns=result.keys())
+        
+    if df.empty:
+        return []
+
+    df['price'] = pd.to_numeric(df['price'], errors='coerce').fillna(0)
+    df['predicted_price'] = pd.to_numeric(df['predicted_price'], errors='coerce').fillna(0)
+    df['difference'] = pd.to_numeric(df['difference'], errors='coerce').fillna(0)
+    df['mileage'] = pd.to_numeric(df['mileage'], errors='coerce').fillna(0)
+
+    feed_data = []
+    for _, row in df.iterrows():
+        clean_name = format_car_name(row.get('year'), row.get('make'), row.get('model'), row.get('trim'))
+        
+        feed_data.append({
+            "name": clean_name,
+            "mileage": int(row['mileage']),
+            "location": str(row.get('location', 'unknown')).title(),
             "list_price": float(row['price']),
             "ai_price": float(row['predicted_price']),
             "difference": float(row['difference']),
