@@ -47,9 +47,9 @@ AutoValuate is currently a functional V1 MVP. The following features and improve
 
 ### User Experience & Personalization
 
-- [ ] **User Authentication:** Adding Google OAuth and Email/Password login so users have personalized profiles.
-- [ ] **Watchlists & Alerts:** Allowing authenticated users to save specific cars to a personal watchlist to track price changes over time.
-- [ ] **City Filtering:** Enabling users to select their preferred city/region to dynamically filter the Market Feed.
+- [x] ~~**User Authentication:** Adding Google OAuth and Email/Password login so users have personalized profiles.~~
+- [x] ~~**Watchlists & Alerts:** Allowing authenticated users to save specific cars to a personal watchlist to track price changes over time.~~ (Alerts coming in V3)
+- [x] ~~**City Filtering:** Enabling users to select their preferred city/region to dynamically filter the Market Feed.~~
 
 ### Data Visualization
 
