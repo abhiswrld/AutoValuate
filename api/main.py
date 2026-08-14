@@ -445,12 +445,10 @@ def get_depreciation_curve(make: str, model_name: str):
     start_year = 2005
     if db_engine:
         with db_engine.connect() as conn:
-            query = text("SELECT MIN(year) FROM cars WHERE make = :make AND model = :model_name")
+            query = text("SELECT MIN(year) FROM cars WHERE make ILIKE :make AND model ILIKE :model_name")
             min_year = conn.execute(query, {"make": make, "model_name": model_name}).scalar()
             if min_year:
-                start_year = int(min_year)
-                if start_year < 1990:
-                    start_year = 1990
+                start_year = max(start_year, 1990)
     
     current_year = 2024
     years = list(range(start_year, current_year + 1))
@@ -515,13 +513,31 @@ def get_depreciation_curve(make: str, model_name: str):
     except Exception as e:
         return {"error": str(e)}
 
+def format_region(r: str) -> str:
+    r = r.lower()
+    mapping = {
+        'sfbay': 'SF Bay',
+        'losangeles': 'Los Angeles',
+        'newyork': 'New York',
+        'sandiego': 'San Diego',
+        'lasvegas': 'Las Vegas',
+        'orangecounty': 'Orange County',
+        'southflorida': 'South Florida',
+        'dallas': 'Dallas',
+        'chicago': 'Chicago',
+        'seattle': 'Seattle',
+        'atlanta': 'Atlanta',
+        'miami': 'Miami'
+    }
+    return mapping.get(r, r.title())
+
 @app.get("/insights/live_data")
 def get_live_data(make: str, model_name: str):
     if not db_engine:
         return []
     with db_engine.connect() as conn:
         query = text("""
-            SELECT year, price, mileage, url, location 
+            SELECT year, price, mileage, url, location, region 
             FROM cars 
             WHERE make ILIKE :make AND model ILIKE :model 
             AND price >= 1000 AND price <= 100000 
@@ -531,11 +547,16 @@ def get_live_data(make: str, model_name: str):
         
         data = []
         for row in result:
+            region_str = str(row[5]) if row[5] and row[5] != 'null' else ''
+            location_str = str(row[4]).title()
+            if region_str and region_str.upper() != 'UNSPECIFIED':
+                location_str = f"{location_str}, {format_region(region_str)}"
+                
             data.append({
                 "year": row[0],
                 "price": float(row[1]),
                 "mileage": float(row[2]) if row[2] else 0,
                 "url": row[3],
-                "location": str(row[4]).title()
+                "location": location_str
             })
         return data
