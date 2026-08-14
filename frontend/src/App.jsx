@@ -764,8 +764,14 @@ function App() {
                       </span>
                     </div>
 
-                    {/* Save Button top-right */}
-                    <div className="absolute top-5 right-5 z-20">
+                    {/* Top Right Controls */}
+                    <div className="absolute top-5 right-5 z-20 flex items-center gap-2">
+                      <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
+                        <span className="bg-indigo-600 text-white px-3 py-1.5 rounded-full font-bold text-xs tracking-wide flex items-center gap-1.5 shadow-lg">
+                          View
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                        </span>
+                      </div>
                       <button 
                         onClick={(e) => {
                           e.preventDefault()
@@ -774,7 +780,7 @@ function App() {
                         className={`p-1.5 rounded-full border backdrop-blur-md transition ${
                           watchlist.includes(car.url) 
                             ? 'bg-indigo-600 border-indigo-500 text-white' 
-                            : 'bg-black/50 border-white/10 text-gray-300 hover:bg-white/10'
+                            : 'bg-black/50 border-white/10 text-gray-300 hover:bg-white/10 hover:scale-110'
                         }`}
                       >
                         <svg className="w-4 h-4" fill={watchlist.includes(car.url) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
@@ -787,13 +793,7 @@ function App() {
                       </div>
                     </div>
 
-                    {/* Hover Overlay */}
-                    <div className="absolute inset-0 bg-[#0a0a0f]/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-30 flex items-center justify-center pointer-events-none">
-                      <div className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold text-sm tracking-wide flex items-center gap-2 translate-y-4 group-hover:translate-y-0 transition-transform duration-300 shadow-xl">
-                        View on Craigslist
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                      </div>
-                    </div>
+
 
                     <div className="absolute inset-0 p-6 flex flex-col justify-end bg-gradient-to-t from-black via-black/60 to-transparent transition-all z-10">
                       <h4 className="text-2xl font-bold mb-6 text-white tracking-tight">{car.name}</h4>
