@@ -261,8 +261,8 @@ def get_region_counts():
     with db_engine.connect() as conn:
         total_query = text("""
             SELECT COUNT(*) FROM cars 
-            WHERE make IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
-            AND location != 'null'
+            WHERE make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
+            AND location IS NOT NULL AND location != 'null' AND TRIM(location) != '' AND location != 'Unknown'
         """)
         total_result = conn.execute(total_query)
         counts['total'] = total_result.fetchone()[0]
@@ -271,8 +271,8 @@ def get_region_counts():
             query = text("""
                 SELECT COUNT(*) FROM cars 
                 WHERE region = :region 
-                AND make IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
-                AND location != 'null'
+                AND make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
+                AND location IS NOT NULL AND location != 'null' AND TRIM(location) != '' AND location != 'Unknown'
             """)
             result = conn.execute(query, {"region": region})
             counts[region] = result.fetchone()[0]
@@ -287,11 +287,11 @@ def get_cities(region: str):
     with db_engine.connect() as conn:
         query = text("""
             SELECT location, COUNT(*) as count FROM cars
-            WHERE region = :region AND make IS NOT NULL 
-            AND location IS NOT NULL AND location != 'Unknown'
+            WHERE region = :region 
+            AND make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
+            AND location IS NOT NULL AND location != 'null' AND TRIM(location) != '' AND location != 'Unknown'
             GROUP BY location
             ORDER BY count DESC
-            LIMIT 50
         """)
         results = conn.execute(query, {"region": region}).fetchall()
         
@@ -304,8 +304,8 @@ def get_market_feed(region: str = "all", city: str = "all"):
         
     base_query = """
         SELECT * FROM cars 
-        WHERE make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL
-        AND location IS NOT NULL AND location != 'null' AND TRIM(location) != ''
+        WHERE make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
+        AND location IS NOT NULL AND location != 'null' AND TRIM(location) != '' AND location != 'Unknown'
     """
     params = {}
     
