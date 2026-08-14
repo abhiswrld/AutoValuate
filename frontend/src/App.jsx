@@ -127,6 +127,19 @@ function App() {
 
   useEffect(() => {
     fetchFeed()
+    
+    // Initial fetch for the default region (sfbay)
+    axios.get(`${API_URL}/cities?region=sfbay`)
+      .then(res => {
+        const data = res.data;
+        if (data.length > 0 && typeof data[0] === 'string') {
+          setAvailableCities(data.map(name => ({ name, count: null })));
+        } else {
+          setAvailableCities(data);
+        }
+      })
+      .catch(err => console.error("Failed to load initial cities:", err));
+
     axios.get(`${API_URL}/regions`)
       .then(res => setRegionCounts(res.data))
       .catch(err => console.error("Failed to load region counts:", err))
@@ -519,14 +532,14 @@ function App() {
                   setSelectedCity(city.name);
                   fetchFeed(selectedRegion, city.name);
                 }}
-                className={`w-full px-2 py-2 rounded-xl text-[11px] font-medium transition border flex justify-center items-center gap-1.5 truncate ${
+                className={`w-full px-3 py-2 rounded-xl text-[11px] font-medium transition border flex justify-between items-center gap-2 truncate ${
                   selectedCity === city.name 
                     ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/30' 
                     : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
                 }`}
               >
                 <span className="truncate">{city.name}</span>
-                {city.count != null && <span className={`shrink-0 ${selectedCity === city.name ? 'text-indigo-400/70' : 'text-gray-600'}`}>{city.count}</span>}
+                {city.count != null && <span className={`shrink-0 font-bold ${selectedCity === city.name ? 'text-white' : 'text-white/80'}`}>{city.count}</span>}
               </button>
             ))}
           </div>
