@@ -72,10 +72,10 @@ const GooglyEye = ({ mouseX, mouseY }) => {
   return (
     <div 
       ref={eyeRef}
-      className="relative w-12 h-12 md:w-[4.5rem] md:h-[4.5rem] bg-white rounded-full flex items-center justify-center overflow-hidden border-4 border-[#0a0a0f] shadow-inner"
+      className="relative w-24 h-24 md:w-36 md:h-36 bg-white rounded-full flex items-center justify-center overflow-hidden border-8 border-[#0a0a0f] shadow-inner"
     >
       <div 
-        className="w-5 h-5 md:w-7 md:h-7 bg-[#0a0a0f] rounded-full transition-transform duration-75 ease-out"
+        className="w-10 h-10 md:w-16 md:h-16 bg-[#0a0a0f] rounded-full transition-transform duration-75 ease-out"
         style={{ transform: `translate(${pupilPos.x}px, ${pupilPos.y}px)` }}
       />
     </div>
@@ -94,7 +94,7 @@ const GooglyEyesContainer = () => {
   }, []);
 
   return (
-    <div className="flex gap-2 ml-4 self-end pb-3">
+    <div className="flex gap-4 justify-center mt-6">
       <GooglyEye mouseX={mousePos.x} mouseY={mousePos.y} />
       <GooglyEye mouseX={mousePos.x} mouseY={mousePos.y} />
     </div>
@@ -403,8 +403,8 @@ function App() {
           <h2 className="text-3xl md:text-[3.25rem] font-extrabold tracking-tighter text-white whitespace-nowrap">
             Never overpay for a <span className="text-indigo-400">used car</span>
           </h2>
-          <div className="flex justify-center items-end text-[6rem] md:text-[9.5rem] font-black text-white leading-none mt-1 tracking-tighter">
-            PERIOD<GooglyEyesContainer />
+          <div className="flex justify-center items-center mt-2">
+            <GooglyEyesContainer />
           </div>
         </motion.div>
 
