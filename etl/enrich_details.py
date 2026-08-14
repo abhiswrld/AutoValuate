@@ -6,8 +6,30 @@ from bs4 import BeautifulSoup
 from sqlalchemy import create_engine, text
 import joblib
 from dotenv import load_dotenv
+from rapidfuzz import process, fuzz
+import re
 
-load_dotenv() 
+load_dotenv()
+
+# Load US Cities globally for the scraper
+def load_us_cities():
+    csv_path = os.path.join(os.path.dirname(__file__), "..", "us_cities.csv")
+    if os.path.exists(csv_path):
+        df_cities = pd.read_csv(csv_path)
+        cities = df_cities['CITY'].dropna().unique()
+        return {city.lower(): city for city in cities}
+    return {}
+
+US_CITIES_DICT = load_us_cities()
+US_CITIES_KEYS = list(US_CITIES_DICT.keys())
+
+def clean_raw_location(loc_str):
+    if not isinstance(loc_str, str):
+        return ""
+    clean_str = loc_str.split(',')[0].strip().lower()
+    clean_str = re.sub(r'\d+', '', clean_str).strip()
+    return clean_str
+
 
 def get_car_details(url):
     headers = {
@@ -106,9 +128,23 @@ def get_car_details(url):
             clean_city_parts.append(part)
             
         if clean_city_parts:
-            clean_city = ' '.join(clean_city_parts)
-            data['location'] = clean_city.lower()
-    except:
+            raw_city = ' '.join(clean_city_parts)
+            clean_city = clean_raw_location(raw_city)
+            
+            # 1. Exact match
+            if clean_city in US_CITIES_KEYS:
+                data['location'] = US_CITIES_DICT[clean_city]
+            # 2. Fuzzy match
+            elif clean_city and US_CITIES_KEYS:
+                best_match = process.extractOne(clean_city, US_CITIES_KEYS, scorer=fuzz.WRatio)
+                if best_match and best_match[1] >= 85:
+                    data['location'] = US_CITIES_DICT[best_match[0]]
+                else:
+                    data['location'] = 'Unknown'
+            else:
+                data['location'] = 'Unknown'
+    except Exception as e:
+        print(f"Failed to extract location: {e}")
         pass
 
     # Prevent infinite loops: if a spec wasn't found, mark as 'unspecified'

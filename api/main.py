@@ -55,63 +55,7 @@ valid_makes = ['toyota', 'honda', 'ford', 'chevrolet', 'chevy', 'nissan', 'bmw',
                'hyundai', 'kia', 'mazda', 'acura', 'jeep', 'dodge', 'ram', 'gmc', 'cadillac', 'infiniti', 'volvo', 'mitsubishi', 'mini', 'porsche', 
                'tesla', 'land', 'jaguar', 'chrysler', 'buick', 'pontiac', 'saturn', 'bentley', 'fiat']
 
-# Curated city whitelist per region — only these appear in the frontend dropdown.
-# The key is used for LIKE matching: WHERE location LIKE '%key%'
-REGION_CITIES = {
-    'sfbay': [
-        'san jose', 'fremont', 'hayward', 'concord', 'vallejo', 'dublin',
-        'santa rosa', 'oakland', 'san mateo', 'fairfield', 'santa clara',
-        'san francisco', 'sunnyvale', 'redwood city', 'san rafael',
-        'berkeley', 'walnut creek', 'santa cruz', 'san leandro', 'palo alto',
-        'napa', 'novato', 'campbell', 'milpitas', 'cupertino', 'mountain view'
-    ],
-    'losangeles': [
-        'los angeles', 'long beach', 'pasadena', 'glendale', 'burbank',
-        'torrance', 'inglewood', 'santa monica', 'van nuys', 'hollywood',
-        'anaheim', 'irvine', 'compton', 'downey', 'pomona', 'riverside',
-        'san fernando', 'woodland hills', 'northridge', 'san gabriel'
-    ],
-    'newyork': [
-        'brooklyn', 'queens', 'bronx', 'manhattan', 'staten island',
-        'yonkers', 'jersey city', 'long island', 'harlem', 'astoria',
-        'flushing', 'jamaica', 'new rochelle', 'westchester', 'hoboken'
-    ],
-    'seattle': [
-        'seattle', 'tacoma', 'bellevue', 'everett', 'renton', 'kent',
-        'kirkland', 'redmond', 'olympia', 'puyallup', 'lynnwood',
-        'bothell', 'sammamish', 'burien', 'federal way'
-    ],
-    'chicago': [
-        'chicago', 'naperville', 'evanston', 'skokie', 'schaumburg',
-        'oak park', 'joliet', 'aurora', 'elgin', 'arlington heights',
-        'waukegan', 'cicero', 'berwyn', 'des plaines', 'orland park'
-    ],
-    'dallas': [
-        'dallas', 'fort worth', 'plano', 'arlington', 'irving', 'garland',
-        'mckinney', 'frisco', 'denton', 'richardson', 'mesquite',
-        'carrollton', 'lewisville', 'grand prairie', 'wylie'
-    ],
-    'miami': [
-        'miami', 'fort lauderdale', 'hialeah', 'hollywood', 'coral gables',
-        'pembroke pines', 'miramar', 'doral', 'homestead', 'kendall',
-        'aventura', 'miami beach', 'boca raton', 'pompano', 'weston'
-    ],
-    'atlanta': [
-        'atlanta', 'marietta', 'decatur', 'roswell', 'kennesaw',
-        'lawrenceville', 'lilburn', 'norcross', 'smyrna', 'duluth',
-        'alpharetta', 'johns creek', 'conyers', 'jonesboro', 'douglasville'
-    ],
-    'boston': [
-        'boston', 'cambridge', 'somerville', 'worcester', 'lowell',
-        'brockton', 'quincy', 'lynn', 'newton', 'medford',
-        'brookline', 'framingham', 'waltham', 'malden', 'methuen'
-    ],
-    'phoenix': [
-        'phoenix', 'mesa', 'scottsdale', 'tempe', 'chandler', 'glendale',
-        'gilbert', 'peoria', 'surprise', 'goodyear', 'avondale',
-        'sun city', 'queen creek', 'buckeye', 'cave creek'
-    ],
-}
+# Region cities whitelist removed; locations are now cleanly stored in the database.
 
 # Helper to format car names nicely (e.g., "toyota rav4" -> "Toyota RAV4")
 def format_car_name(year, make, model, trim=None):
@@ -339,26 +283,19 @@ def get_region_counts():
 def get_cities(region: str):
     if not db_engine:
         return []
-    
-    city_list = REGION_CITIES.get(region, [])
-    if not city_list:
-        return []
-    
-    # Return only cities that actually have cars in the database
-    results = []
+        
     with db_engine.connect() as conn:
-        for city in city_list:
-            query = text("""
-                SELECT COUNT(*) FROM cars
-                WHERE region = :region AND make IS NOT NULL
-                AND LOWER(location) LIKE :pattern
-            """)
-            count = conn.execute(query, {"region": region, "pattern": f"%{city}%"}).fetchone()[0]
-            if count > 0:
-                results.append({"name": city.title(), "count": count})
-    
-    results.sort(key=lambda x: x['count'], reverse=True)
-    return results[:20]
+        query = text("""
+            SELECT location, COUNT(*) as count FROM cars
+            WHERE region = :region AND make IS NOT NULL 
+            AND location IS NOT NULL AND location != 'Unknown'
+            GROUP BY location
+            ORDER BY count DESC
+            LIMIT 50
+        """)
+        results = conn.execute(query, {"region": region}).fetchall()
+        
+    return [{"name": row[0].title(), "count": row[1]} for row in results]
 
 @app.get("/feed")
 def get_market_feed(region: str = "all", city: str = "all"):
@@ -377,8 +314,8 @@ def get_market_feed(region: str = "all", city: str = "all"):
         params["region"] = region
         
     if city != "all":
-        base_query += " AND LOWER(location) LIKE :city"
-        params["city"] = f"%{city.lower()}%"
+        base_query += " AND location = :city"
+        params["city"] = city.title()
         
     base_query += " LIMIT 300"
     
