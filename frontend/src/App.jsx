@@ -75,6 +75,7 @@ function App() {
     'phoenix': 'PH'
   }
   const [availableCities, setAvailableCities] = useState([])
+  const [showAllCities, setShowAllCities] = useState(false)
   
   // Auth & Watchlist States
   const [showAuthModal, setShowAuthModal] = useState(false)
@@ -95,6 +96,7 @@ function App() {
   const handleRegionClick = (region) => {
     setSelectedRegion(region);
     setSelectedCity('all');
+    setShowAllCities(false);
     fetchFeed(region, 'all');
     
     if (region !== 'all') {
@@ -525,7 +527,7 @@ function App() {
             >
               All Cities
             </button>
-            {availableCities.map((city) => (
+            {(showAllCities ? availableCities : availableCities.filter(c => (c.count || 0) >= 10)).map((city) => (
               <button
                 key={city.name}
                 onClick={() => {
@@ -542,6 +544,17 @@ function App() {
                 {city.count != null && <span className={`shrink-0 font-bold ${selectedCity === city.name ? 'text-white' : 'text-white/80'}`}>{city.count}</span>}
               </button>
             ))}
+            
+            {availableCities.filter(c => (c.count || 0) < 10).length > 0 && (
+              <button
+                onClick={() => setShowAllCities(!showAllCities)}
+                className="w-full px-3 py-2 rounded-xl text-[11px] font-medium transition border flex justify-center items-center gap-2 truncate bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white"
+              >
+                {showAllCities 
+                  ? "Hide cities with <10 cars" 
+                  : `Show ${availableCities.filter(c => (c.count || 0) < 10).length} cities with <10 cars`}
+              </button>
+            )}
           </div>
         )}
 
