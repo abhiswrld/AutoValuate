@@ -15,25 +15,23 @@ import {
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
-    const scatterData = payload.find(p => p.payload.url)?.payload;
-    const lineData = payload.find(p => !p.payload.url)?.payload || payload.find(p => p.dataKey === 'price' && !p.payload.url)?.payload;
-    const val = lineData?.value || payload[0]?.value;
+    const data = payload[0];
+    const isScatter = !!data.payload?.url;
 
     return (
       <div className="flex flex-col gap-2">
-        {scatterData && (
+        {isScatter ? (
           <div className="bg-[#0c0d12] border border-white/10 p-4 rounded-xl shadow-2xl backdrop-blur-md">
-            <p className="text-white font-bold mb-1">{scatterData.year} Model</p>
-            <p className="text-gray-300 text-sm mb-1">{scatterData.location}</p>
-            <p className="text-emerald-400 font-bold mb-1">${scatterData.price?.toLocaleString()}</p>
-            <p className="text-gray-400 text-xs">{scatterData.mileage?.toLocaleString()} miles</p>
+            <p className="text-white font-bold mb-1">{data.payload?.year} Model</p>
+            <p className="text-gray-300 text-sm mb-1">{data.payload?.location}</p>
+            <p className="text-emerald-400 font-bold mb-1">${data.payload?.price?.toLocaleString()}</p>
+            <p className="text-gray-400 text-xs">{data.payload?.mileage?.toLocaleString()} miles</p>
           </div>
-        )}
-        {val && (
+        ) : (
           <div className="bg-[#0c0d12] border border-indigo-500/20 p-4 rounded-xl shadow-2xl backdrop-blur-md">
-            <p className="text-white font-bold mb-1">Year {label || scatterData?.year}</p>
+            <p className="text-white font-bold mb-1">Year {label || data.payload?.year}</p>
             <p className="text-indigo-400 font-bold text-sm">Predicted Value:</p>
-            <p className="text-white text-xl font-extrabold">${val?.toLocaleString(undefined, {maximumFractionDigits:0})}</p>
+            <p className="text-white text-xl font-extrabold">${data.value?.toLocaleString(undefined, {maximumFractionDigits:0})}</p>
           </div>
         )}
       </div>
@@ -164,7 +162,7 @@ const Insights = () => {
                 tickLine={false}
                 dx={-10}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2 }} />
+              <Tooltip shared={false} content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2 }} />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
               
               <Line 

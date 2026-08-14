@@ -12,6 +12,12 @@ from fastapi import Response
 from sqlalchemy import create_engine, text
 import uuid
 from typing import List
+import os
+from dotenv import load_dotenv, find_dotenv
+
+# Find the .env file in the root directory and load it
+dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+load_dotenv(dotenv_path)
 
 # 1. Initialize the App
 app = FastAPI(title="AutoValuate API")
@@ -41,8 +47,12 @@ print("Models loaded successfully!")
 
 # 3. Initialize Database Connection
 DATABASE_URL = os.getenv("DATABASE_URL")
-db_engine = create_engine(DATABASE_URL) if DATABASE_URL else None
-print("Database engine created!")
+db_engine = create_engine(DATABASE_URL, pool_size=50, max_overflow=50, pool_timeout=60, pool_pre_ping=True) if DATABASE_URL else None
+
+if db_engine:
+    print("Database engine created!")
+else:
+    print("WARNING: Database engine NOT created! DATABASE_URL is missing!")
 
 # 4. In-Memory Job Queue for Async Tasks
 jobs = {}
@@ -308,7 +318,7 @@ def get_market_feed(region: str = "all", city: str = "all", sort_by: str = "best
         AND location IS NOT NULL AND location != 'null' AND TRIM(location) != '' AND location != 'Unknown'
         AND predicted_price IS NOT NULL AND predicted_price > 0
         AND price >= 1000
-        AND difference < (predicted_price * 0.35)
+        AND difference > 0
     """
     params = {}
     
@@ -437,8 +447,10 @@ def get_depreciation_curve(make: str, model_name: str):
         with db_engine.connect() as conn:
             query = text("SELECT MIN(year) FROM cars WHERE make = :make AND model = :model_name")
             min_year = conn.execute(query, {"make": make, "model_name": model_name}).scalar()
-            if min_year and min_year > 2005:
+            if min_year:
                 start_year = int(min_year)
+                if start_year < 1990:
+                    start_year = 1990
     
     current_year = 2024
     years = list(range(start_year, current_year + 1))
