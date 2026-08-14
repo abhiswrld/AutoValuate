@@ -11,17 +11,34 @@ import re
 
 load_dotenv()
 
-# Load US Cities globally for the scraper
-def load_us_cities():
+REGION_TO_STATES = {
+    'sfbay': ['CA'],
+    'losangeles': ['CA'],
+    'newyork': ['NY', 'NJ', 'CT', 'PA'],
+    'seattle': ['WA'],
+    'chicago': ['IL', 'IN', 'WI'],
+    'dallas': ['TX'],
+    'miami': ['FL'],
+    'atlanta': ['GA'],
+    'boston': ['MA', 'NH', 'RI'],
+    'phoenix': ['AZ']
+}
+
+# Load US Cities grouped by state
+def load_cities_by_state():
     csv_path = os.path.join(os.path.dirname(__file__), "..", "us_cities.csv")
+    cities_by_state = {}
     if os.path.exists(csv_path):
         df_cities = pd.read_csv(csv_path)
-        cities = df_cities['CITY'].dropna().unique()
-        return {city.lower(): city for city in cities}
-    return {}
+        for _, row in df_cities.iterrows():
+            state = str(row['STATE_CODE'])
+            city = str(row['CITY'])
+            if state not in cities_by_state:
+                cities_by_state[state] = {}
+            cities_by_state[state][city.lower()] = city
+    return cities_by_state
 
-US_CITIES_DICT = load_us_cities()
-US_CITIES_KEYS = list(US_CITIES_DICT.keys())
+CITIES_BY_STATE = load_cities_by_state()
 
 def clean_raw_location(loc_str):
     if not isinstance(loc_str, str):
@@ -131,18 +148,34 @@ def get_car_details(url):
             raw_city = ' '.join(clean_city_parts)
             clean_city = clean_raw_location(raw_city)
             
-            # 1. Exact match
-            if clean_city in US_CITIES_KEYS:
-                data['location'] = US_CITIES_DICT[clean_city]
-            # 2. Fuzzy match
-            elif clean_city and US_CITIES_KEYS:
-                best_match = process.extractOne(clean_city, US_CITIES_KEYS, scorer=fuzz.WRatio)
-                if best_match and best_match[1] >= 85:
-                    data['location'] = US_CITIES_DICT[best_match[0]]
-                else:
-                    data['location'] = 'Unknown'
-            else:
-                data['location'] = 'Unknown'
+            # Find Region from URL
+            try:
+                region = url.split('//')[1].split('.')[0]
+            except:
+                region = 'unknown'
+                
+            data['location'] = 'Unknown'
+            
+            if clean_city and region in REGION_TO_STATES:
+                allowed_states = REGION_TO_STATES[region]
+                
+                # Build dict of allowed cities
+                allowed_cities_dict = {}
+                for state in allowed_states:
+                    if state in CITIES_BY_STATE:
+                        allowed_cities_dict.update(CITIES_BY_STATE[state])
+                        
+                allowed_keys = list(allowed_cities_dict.keys())
+                
+                # 1. Exact match
+                if clean_city in allowed_keys:
+                    data['location'] = allowed_cities_dict[clean_city]
+                # 2. Fuzzy match
+                elif allowed_keys:
+                    best_match = process.extractOne(clean_city, allowed_keys, scorer=fuzz.WRatio)
+                    if best_match and best_match[1] >= 85:
+                        data['location'] = allowed_cities_dict[best_match[0]]
+                        
     except Exception as e:
         print(f"Failed to extract location: {e}")
         pass

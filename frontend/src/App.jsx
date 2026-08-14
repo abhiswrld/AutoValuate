@@ -61,6 +61,19 @@ function App() {
   const [regionCounts, setRegionCounts] = useState({})
   const [selectedRegion, setSelectedRegion] = useState('all')
   const [selectedCity, setSelectedCity] = useState('all')
+
+  const regionAbbreviations = {
+    'sfbay': 'SF',
+    'losangeles': 'LA',
+    'newyork': 'NY',
+    'seattle': 'SE',
+    'chicago': 'CH',
+    'dallas': 'DA',
+    'miami': 'MI',
+    'atlanta': 'AT',
+    'boston': 'BO',
+    'phoenix': 'PH'
+  }
   const [availableCities, setAvailableCities] = useState([])
   
   // Auth & Watchlist States
@@ -571,7 +584,7 @@ function App() {
                     <div className="absolute top-5 left-5 z-20 flex flex-col gap-2">
                       <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium">
                         <PinIcon className="w-3 h-3" />
-                        {car.location}
+                        {selectedRegion === 'all' && car.region && regionAbbreviations[car.region] ? `${car.location}, ${regionAbbreviations[car.region]}` : car.location}
                       </span>
                       <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium w-fit">
                         {car.mileage.toLocaleString()} mi
