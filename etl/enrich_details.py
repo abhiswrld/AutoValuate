@@ -46,7 +46,31 @@ def clean_raw_location(loc_str):
     clean_str = loc_str.split(',')[0].strip().lower()
     clean_str = re.sub(r'\d+', '', clean_str).strip()
     return clean_str
+STATE_TO_REGION = {
+    'WA': 'seattle',
+    'NY': 'newyork', 'NJ': 'newyork', 'CT': 'newyork', 'PA': 'newyork',
+    'IL': 'chicago', 'IN': 'chicago', 'WI': 'chicago',
+    'TX': 'dallas',
+    'FL': 'miami',
+    'GA': 'atlanta',
+    'MA': 'boston', 'NH': 'boston', 'RI': 'boston',
+    'AZ': 'phoenix'
+}
 
+def get_ca_region(city_name):
+    try:
+        csv_path = os.path.join(os.path.dirname(__file__), "..", "us_cities.csv")
+        df = pd.read_csv(csv_path)
+        match = df[(df['STATE_CODE'] == 'CA') & (df['CITY'].str.lower() == city_name.lower())]
+        if not match.empty:
+            lat = match.iloc[0]['LATITUDE']
+            if lat > 35.5:
+                return 'sfbay'
+            else:
+                return 'losangeles'
+    except:
+        pass
+    return 'other'
 
 def get_car_details(url):
     headers = {
@@ -141,6 +165,8 @@ def get_car_details(url):
         meta_geo = soup.find('meta', attrs={'name': 'geo.placename'})
         meta_region = soup.find('meta', attrs={'name': 'geo.region'})
         
+        data['region'] = 'other'
+        
         if meta_geo:
             clean_city = clean_raw_location(meta_geo.get('content'))
             
@@ -191,6 +217,13 @@ def get_car_details(url):
                 best_match = process.extractOne(clean_city, allowed_keys, scorer=fuzz.WRatio)
                 if best_match and best_match[1] >= 85:
                     data['location'] = allowed_cities_dict[best_match[0]]
+                    
+            if allowed_states:
+                state_code = allowed_states[0]
+                if state_code in STATE_TO_REGION:
+                    data['region'] = STATE_TO_REGION[state_code]
+                elif state_code == 'CA' and data['location'] != 'Unknown':
+                    data['region'] = get_ca_region(data['location'])
                     
     except Exception as e:
         print(f"Failed to extract location: {e}")
@@ -246,7 +279,7 @@ def enrich_database():
         elif details == "sold":
             print(" -> Sold/Deleted")
             with engine.begin() as conn:
-                conn.execute(text("UPDATE cars SET condition = 'sold', title_status = 'sold' WHERE url = :url"), {"url": url})
+                conn.execute(text("DELETE FROM cars WHERE url = :url"), {"url": url})
         else:
             print(f" -> Success: {details.get('make')} {details.get('model')} {details.get('trim')}")
             with engine.begin() as conn:
@@ -256,7 +289,8 @@ def enrich_database():
                         cylinders = :cyl, drive = :drive, fuel = :fuel, 
                         transmission = :trans, type = :type,
                         make = :make, model = :model, trim = :trim,
-                        location = COALESCE(:loc, location)
+                        location = COALESCE(NULLIF(:loc, 'Unknown'), location),
+                        region = CASE WHEN :reg != 'other' THEN :reg ELSE region END
                     WHERE url = :url
                 """)
                 conn.execute(update_query, {
@@ -271,6 +305,7 @@ def enrich_database():
                     "model": details.get('model'),
                     "trim": details.get('trim'),
                     "loc": details.get('location'),
+                    "reg": details.get('region', 'other'),
                     "url": url
                 })
                 updated_count += 1
