@@ -59,7 +59,7 @@ function App() {
   const [progress, setProgress] = useState(0)
   const [jobId, setJobId] = useState(null)
   const [regionCounts, setRegionCounts] = useState({})
-  const [selectedRegion, setSelectedRegion] = useState('all')
+  const [selectedRegion, setSelectedRegion] = useState('sfbay')
   const [selectedCity, setSelectedCity] = useState('all')
 
   const regionAbbreviations = {
@@ -465,7 +465,6 @@ function App() {
         {/* Row 1: Main Regions */}
         <div className="flex items-center w-full gap-2 overflow-x-auto mb-4 whitespace-nowrap scrollbar-hide">
           {[
-            { key: 'all', label: 'Nationwide' },
             { key: 'sfbay', label: 'Bay Area' },
             { key: 'losangeles', label: 'LA' },
             { key: 'newyork', label: 'NY' },
@@ -499,7 +498,7 @@ function App() {
 
         {/* Row 2: Dynamic Sub-Cities */}
         {selectedRegion !== 'all' && availableCities.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-10 gap-3 w-full mb-10 p-4 bg-white/[0.02] border border-white/5 rounded-2xl items-center">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 w-full mb-10 p-4 bg-white/[0.02] border border-white/5 rounded-2xl items-center">
             <button
               onClick={() => {
                 setSelectedCity('all');
