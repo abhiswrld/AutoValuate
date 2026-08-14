@@ -228,6 +228,10 @@ def get_car_details(url):
     except Exception as e:
         print(f"Failed to extract location: {e}")
         pass
+        
+    # Extract high-res image
+    meta_image = soup.find('meta', property='og:image')
+    data['image_url'] = meta_image.get('content') if meta_image else None
 
     # Prevent infinite loops: if a spec wasn't found, mark as 'unspecified'
     for key in ['condition', 'title_status', 'cylinders', 'drive', 'fuel', 'transmission', 'type']:
@@ -290,7 +294,8 @@ def enrich_database():
                         transmission = :trans, type = :type,
                         make = :make, model = :model, trim = :trim,
                         location = COALESCE(NULLIF(:loc, 'Unknown'), location),
-                        region = CASE WHEN :reg != 'other' THEN :reg ELSE region END
+                        region = CASE WHEN :reg != 'other' THEN :reg ELSE region END,
+                        image_url = COALESCE(:img, image_url)
                     WHERE url = :url
                 """)
                 conn.execute(update_query, {
@@ -306,6 +311,7 @@ def enrich_database():
                     "trim": details.get('trim'),
                     "loc": details.get('location'),
                     "reg": details.get('region', 'other'),
+                    "img": details.get('image_url'),
                     "url": url
                 })
                 updated_count += 1

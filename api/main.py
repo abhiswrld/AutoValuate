@@ -359,7 +359,8 @@ def get_market_feed(region: str = "all", city: str = "all", sort_by: str = "best
             "list_price": float(row['price']),
             "ai_price": float(row['predicted_price']),
             "difference": float(row['difference']),
-            "url": str(row.get('url', '#'))
+            "url": str(row.get('url', '#')),
+            "image_url": str(row.get('image_url', '')) if pd.notna(row.get('image_url')) else None
         })
         
     return feed_data
@@ -398,7 +399,117 @@ def get_watchlist_cars(urls: List[str]):
             "list_price": float(row['price']),
             "ai_price": float(row['predicted_price']),
             "difference": float(row['difference']),
-            "url": str(row.get('url', '#'))
+            "url": str(row.get('url', '#')),
+            "image_url": str(row.get('image_url', '')) if pd.notna(row.get('image_url')) else None
         })
         
     return feed_data
+
+@app.get("/insights/makes")
+def get_makes():
+    if not db_engine:
+        return []
+    with db_engine.connect() as conn:
+        query = text("SELECT DISTINCT make FROM cars WHERE make IS NOT NULL ORDER BY make")
+        result = conn.execute(query).fetchall()
+        return [row[0] for row in result]
+
+@app.get("/insights/models")
+def get_models(make: str):
+    if not db_engine:
+        return []
+    with db_engine.connect() as conn:
+        query = text("SELECT DISTINCT model FROM cars WHERE make = :make AND model IS NOT NULL ORDER BY model")
+        result = conn.execute(query, {"make": make}).fetchall()
+        return [row[0] for row in result]
+
+@app.get("/insights/depreciation")
+def get_depreciation_curve(make: str, model_name: str):
+    # Predict the value for the last 20 years
+    current_year = 2024
+    years = list(range(2005, 2025))
+    
+    # Create a synthetic dataframe
+    synthetic_data = []
+    for year in years:
+        age = current_year - year
+        mileage = age * 12000 # 12k miles per year average
+        synthetic_data.append({
+            'age': age,
+            'make': make.lower(),
+            'model': model_name.lower(),
+            'trim': 'unspecified',
+            'mileage': mileage,
+            'location': 'unspecified',
+            'condition': 'good',
+            'title_status': 'clean',
+            'cylinders': 'unspecified',
+            'drive': 'unspecified',
+            'fuel': 'gas',
+            'transmission': 'automatic',
+            'type': 'unspecified',
+            'avg_market_price': 15000, # Placeholder, model handles this
+            'estimated_msrp': 25000,
+        })
+        
+    df_synth = pd.DataFrame(synthetic_data)
+    
+    # We need to fill the baseline market data (MSRP and AVG Price) correctly
+    try:
+        avg_prices = pd.read_csv('api/avg_prices.csv')
+        match = avg_prices[(avg_prices['make'] == make.lower()) & (avg_prices['model'] == model_name.lower())]
+        if not match.empty:
+            avg_price = match['avg_market_price'].values[0]
+            msrp = match['estimated_msrp'].values[0]
+            df_synth['avg_market_price'] = avg_price
+            df_synth['estimated_msrp'] = msrp
+    except:
+        pass
+        
+    # Predict!
+    try:
+        X_encoded = ohe.transform(df_synth[['make', 'model', 'trim', 'location', 'condition', 'title_status', 'cylinders', 'drive', 'fuel', 'transmission', 'type']])
+        X_encoded_df = pd.DataFrame(X_encoded, columns=ohe.get_feature_names_out(), index=df_synth.index)
+        
+        X_num = df_synth[['age', 'mileage', 'avg_market_price', 'estimated_msrp']]
+        
+        X_final = pd.concat([X_num, X_encoded_df], axis=1)
+        X_final = X_final.reindex(columns=model_columns, fill_value=0)
+        
+        predictions = model.predict(X_final)
+        
+        curve = []
+        for i, year in enumerate(years):
+            curve.append({
+                "year": year,
+                "price": float(predictions[i])
+            })
+            
+        return curve
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/insights/live_data")
+def get_live_data(make: str, model_name: str):
+    if not db_engine:
+        return []
+    with db_engine.connect() as conn:
+        query = text("""
+            SELECT year, price, mileage, url, location 
+            FROM cars 
+            WHERE make ILIKE :make AND model ILIKE :model 
+            AND price >= 1000 AND price <= 100000 
+            AND year >= 2000
+        """)
+        result = conn.execute(query, {"make": f"%{make}%", "model": f"%{model_name}%"}).fetchall()
+        
+        data = []
+        for row in result:
+            data.append({
+                "year": row[0],
+                "price": float(row[1]),
+                "mileage": float(row[2]) if row[2] else 0,
+                "url": row[3],
+                "location": str(row[4]).title()
+            })
+        return data

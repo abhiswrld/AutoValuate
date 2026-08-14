@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import axios from 'axios'
 import { supabase } from './supabaseClient'
+import Insights from './Insights'
 
 // Car icon, built from separate wheel, body, and window layers
 const CarIcon = ({ className = "w-10 h-10 shrink-0" }) => (
@@ -185,7 +186,7 @@ function App() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [feed, setFeed] = useState([])
-  const [showWipMsg, setShowWipMsg] = useState(false)
+  const [activeTab, setActiveTab] = useState('feed')
   const [progress, setProgress] = useState(0)
   const [jobId, setJobId] = useState(null)
   const [regionCounts, setRegionCounts] = useState({})
@@ -479,8 +480,8 @@ function App() {
           </span>
         </h1>
         <div className="flex items-center space-x-8 text-base font-medium text-gray-400">
-          <a href="#feed" className="hover:text-white transition">Feed</a>
-          <a href="#" onClick={(e) => { e.preventDefault(); setShowWipMsg(true) }} className="hover:text-white transition">Insights</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('feed') }} className={`transition ${activeTab === 'feed' ? 'text-white' : 'hover:text-white'}`}>Feed</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('insights') }} className={`transition ${activeTab === 'insights' ? 'text-white' : 'hover:text-white'}`}>Insights</a>
           <a href={`${API_URL}/docs`} target="_blank" rel="noreferrer" className="hover:text-white transition">API</a>
           {user ? (
             <button onClick={handleLogout} className="px-4 py-1.5 bg-white/5 border border-white/10 text-white hover:bg-white/10 transition rounded-lg text-base">
@@ -733,127 +734,191 @@ function App() {
               </button>
             )}
           </div>
-          
-          {!showWatchlist && (
+        </div>
+
+      {activeTab === 'feed' ? (
+        <>
+          <div className="max-w-7xl mx-auto px-6 mb-16 flex flex-col md:flex-row items-center justify-between gap-6 relative z-10" id="feed">
+            <div className="flex gap-3 overflow-x-auto pb-4 md:pb-0 w-full md:w-auto snap-x">
+              {['all', 'sfbay', 'losangeles', 'newyork', 'seattle', 'chicago', 'dallas', 'miami', 'atlanta', 'boston', 'phoenix'].map(region => (
+                <button
+                  key={region}
+                  onClick={() => handleRegionClick(region)}
+                  className={`px-5 py-2.5 rounded-full whitespace-nowrap text-sm font-semibold transition-all snap-center flex items-center gap-2 ${
+                    selectedRegion === region
+                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
+                      : 'bg-[#15161c] text-gray-400 hover:text-white hover:bg-white/10 border border-white/5'
+                  }`}
+                >
+                  {region === 'all' ? 'Nationwide' : region === 'sfbay' ? 'Bay Area' : region === 'newyork' ? 'NY' : region === 'losangeles' ? 'LA' : region.charAt(0).toUpperCase() + region.slice(1)}
+                  {regionCounts[region] && <span className="text-[10px] opacity-60 ml-1">{regionCounts[region]}</span>}
+                </button>
+              ))}
+            </div>
+
             <SortDropdown sortBy={sortBy} onSortChange={handleSortChange} />
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {(() => {
-            const carsToShow = showWatchlist ? watchlistCars : feed;
-            
-            if (carsToShow && carsToShow.length > 0) {
-              return carsToShow.map((car, i) => {
-                const diff = formatDifference(car.difference)
-                return (
-                  <motion.a
-                    key={i}
-                    href={car.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, delay: i * 0.05 }}
-                    whileHover={{ scale: 1.02 }}
-                    className="relative h-96 rounded-2xl overflow-hidden border border-white/10 group cursor-pointer bg-gradient-to-br from-[#0f111a] to-[#0a0a0f] block shadow-lg"
-                  >
-                    {/* Location + Mileage stacked top-left */}
-                    <div className="absolute top-5 left-5 z-20 flex flex-col gap-2">
-                      <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium">
-                        <PinIcon className="w-3 h-3" />
-                        {selectedRegion === 'all' && car.region && regionAbbreviations[car.region] ? `${car.location}, ${regionAbbreviations[car.region]}` : car.location}
-                      </span>
-                      <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium w-fit">
-                        {car.mileage.toLocaleString()} mi
-                      </span>
-                    </div>
-
-                    {/* Top Right Controls */}
-                    <div className="absolute top-5 right-5 z-20 flex items-center gap-2">
-                      <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
-                        <span className="bg-indigo-600 text-white px-3 py-1.5 rounded-full font-bold text-xs tracking-wide flex items-center gap-1.5 shadow-lg">
-                          View
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                        </span>
-                      </div>
-                      <button 
-                        onClick={(e) => {
-                          e.preventDefault()
-                          toggleSaveCar(car.url)
-                        }}
-                        className={`p-1.5 rounded-full border backdrop-blur-md transition ${
-                          watchlist.includes(car.url) 
-                            ? 'bg-indigo-600 border-indigo-500 text-white' 
-                            : 'bg-black/50 border-white/10 text-gray-300 hover:bg-white/10 hover:scale-110'
-                        }`}
-                      >
-                        <svg className="w-4 h-4" fill={watchlist.includes(car.url) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
-                      </button>
-                    </div>
-
-                    <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-0">
-                      <div className="absolute -top-12 -right-16 opacity-[0.08] blur-[2px] mix-blend-screen group-hover:scale-110 group-hover:opacity-[0.15] group-hover:-translate-x-2 transition-all duration-700 ease-out">
-                        <CarIcon className="w-80 h-80 scale-x-[-1]" />
-                      </div>
-                    </div>
-
-
-
-                    <div className="absolute inset-0 p-6 flex flex-col justify-end bg-gradient-to-t from-black via-black/60 to-transparent transition-all z-10">
-                      <h4 className="text-2xl font-bold mb-6 text-white tracking-tight">{car.name}</h4>
-
-                      <div className="flex justify-between items-end mb-4">
-                        <div>
-                          <p className="text-xs uppercase tracking-widest text-gray-500 mb-1 font-semibold">Listed Price</p>
-                          <p className="text-3xl font-extrabold text-white">${car.list_price.toLocaleString()}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs uppercase tracking-widest text-indigo-400/80 mb-1 font-semibold">AI Prediction</p>
-                          <p className="text-3xl font-extrabold text-indigo-300">${car.ai_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                        </div>
-                      </div>
-
-                      <div className="mt-2 pt-4 border-t border-white/10 flex justify-center">
-                        <span className={`text-sm font-bold tracking-wide ${diff.colorClass}`}>
-                          {diff.text}
-                        </span>
-                      </div>
-                    </div>
-                  </motion.a>
-                )
-              })
-            } else {
-              return (
-                <div className="col-span-3 text-center text-gray-500 py-10 flex justify-center items-center gap-2">
-                  <RefreshIcon className="w-4 h-4 animate-spin opacity-50" />
-                  {showWatchlist ? "No saved cars yet." : "Loading live market deals..."}
-                </div>
-              )
-            }
-          })()}
-        </div>
-
-        {!showWatchlist && hasMore && feed.length > 0 && (
-          <div className="flex justify-center mt-12 mb-4">
-            <button
-              onClick={() => fetchFeed(selectedRegion, selectedCity, sortBy, offset + 15, true)}
-              disabled={loadingFeed}
-              className={`px-8 py-3 rounded-full font-medium transition border flex items-center gap-3 ${
-                loadingFeed 
-                  ? 'bg-white/5 text-gray-500 border-white/5 cursor-not-allowed'
-                  : 'bg-white/10 text-white border-white/20 hover:bg-white/20 hover:scale-105'
-              }`}
-            >
-              {loadingFeed ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                  Loading...
-                </>
-              ) : 'Load More Cars'}
-            </button>
           </div>
-        )}
+
+          {availableCities.length > 0 && selectedRegion !== 'all' && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="max-w-5xl mx-auto px-6 mb-12 relative z-10"
+            >
+              <div className="bg-[#0c0d12]/80 backdrop-blur-xl border border-white/5 rounded-2xl p-4 flex flex-col items-center">
+                <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 w-full transition-all duration-300 ${!showAllCities ? 'max-h-[140px] overflow-hidden' : ''}`}>
+                  <button
+                    onClick={() => handleCityClick('all')}
+                    className={`px-4 py-3 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                      selectedCity === 'all'
+                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                        : 'bg-white/[0.02] text-gray-400 hover:text-white hover:bg-white/[0.05] border border-transparent'
+                    }`}
+                  >
+                    All Cities
+                  </button>
+                  {availableCities.map(city => (
+                    <button
+                      key={city.name}
+                      onClick={() => handleCityClick(city.name)}
+                      className={`px-4 py-3 rounded-xl text-xs font-semibold tracking-wide transition-all flex justify-between items-center ${
+                        selectedCity === city.name
+                          ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                          : 'bg-white/[0.02] text-gray-400 hover:text-white hover:bg-white/[0.05] border border-transparent'
+                      }`}
+                    >
+                      <span className="truncate pr-2">{city.name}</span>
+                      {city.count && <span className="opacity-50 text-[10px]">{city.count}</span>}
+                    </button>
+                  ))}
+                </div>
+                {availableCities.length > 7 && (
+                  <button
+                    onClick={() => setShowAllCities(!showAllCities)}
+                    className="mt-4 text-xs font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition"
+                  >
+                    {showAllCities ? 'Show Less' : 'Show All Cities'}
+                    <svg className={`w-4 h-4 transition-transform ${showAllCities ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6 max-w-[1400px] mx-auto px-6 relative z-10">
+            {(() => {
+              const feedToRender = showWatchlist ? watchlistCars : feed;
+              if (feedToRender.length > 0) {
+                return (feedToRender || []).map((car, index) => {
+                  const diff = formatDifference(car.difference, car.list_price, car.ai_price)
+                  
+                  return (
+                    <motion.a
+                      key={`${car.url}-${index}`}
+                      href={car.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: Math.min(index * 0.05, 0.5) }}
+                      className="group relative h-[380px] rounded-2xl overflow-hidden border border-white/10 hover:border-indigo-500/50 transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_20px_40px_-15px_rgba(79,70,229,0.3)] bg-[#0a0b10] flex flex-col"
+                    >
+                      <div className="absolute top-4 left-4 z-20 flex gap-2">
+                        <span className="px-3 py-1 bg-black/60 backdrop-blur-md rounded-full text-xs font-bold text-gray-300 border border-white/10 flex items-center gap-1.5">
+                          <PinIcon /> {car.location}
+                        </span>
+                        <span className="px-3 py-1 bg-black/60 backdrop-blur-md rounded-full text-xs font-bold text-gray-300 border border-white/10">
+                          {car.mileage.toLocaleString()} mi
+                        </span>
+                      </div>
+                      
+                      <div className="absolute top-4 right-4 z-20">
+                        <button 
+                          onClick={(e) => handleWatchlistToggle(e, car.url)}
+                          className={`p-2 rounded-full backdrop-blur-md border transition-all ${
+                            watchlist.includes(car.url) 
+                              ? 'bg-rose-500/20 border-rose-500/50 text-rose-400' 
+                              : 'bg-black/60 border-white/10 text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          <svg className="w-4 h-4" fill={watchlist.includes(car.url) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                        </button>
+                      </div>
+
+                      <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-0">
+                        {car.image_url ? (
+                          <img 
+                            src={car.image_url} 
+                            alt={car.name} 
+                            className="w-full h-full object-cover opacity-60 mix-blend-screen group-hover:scale-105 group-hover:opacity-80 transition-all duration-700 ease-out"
+                          />
+                        ) : (
+                          <div className="absolute -top-12 -right-16 opacity-[0.08] blur-[2px] mix-blend-screen group-hover:scale-110 group-hover:opacity-[0.15] group-hover:-translate-x-2 transition-all duration-700 ease-out">
+                            <CarIcon className="w-80 h-80 scale-x-[-1]" />
+                          </div>
+                        )}
+                      </div>
+
+
+
+                      <div className="absolute inset-0 p-6 flex flex-col justify-end bg-gradient-to-t from-black via-black/60 to-transparent transition-all z-10">
+                        <h4 className="text-2xl font-bold mb-6 text-white tracking-tight">{car.name}</h4>
+
+                        <div className="flex justify-between items-end mb-4">
+                          <div>
+                            <p className="text-xs uppercase tracking-widest text-gray-500 mb-1 font-semibold">Listed Price</p>
+                            <p className="text-3xl font-extrabold text-white">${car.list_price.toLocaleString()}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs uppercase tracking-widest text-indigo-400/80 mb-1 font-semibold">AI Prediction</p>
+                            <p className="text-3xl font-extrabold text-indigo-300">${car.ai_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-2 pt-4 border-t border-white/10 flex justify-center">
+                          <span className={`text-sm font-bold tracking-wide ${diff.colorClass}`}>
+                            {diff.text}
+                          </span>
+                        </div>
+                      </div>
+                    </motion.a>
+                  )
+                })
+              } else {
+                return (
+                  <div className="col-span-3 text-center text-gray-500 py-10 flex justify-center items-center gap-2">
+                    <RefreshIcon className="w-4 h-4 animate-spin opacity-50" />
+                    {showWatchlist ? "No saved cars yet." : "Loading live market deals..."}
+                  </div>
+                )
+              }
+            })()}
+          </div>
+
+          {!showWatchlist && hasMore && feed.length > 0 && (
+            <div className="flex justify-center mt-12 mb-4">
+              <button
+                onClick={() => fetchFeed(selectedRegion, selectedCity, sortBy, offset + 15, true)}
+                disabled={loadingFeed}
+                className={`px-8 py-3 rounded-full font-medium transition border flex items-center gap-3 ${
+                  loadingFeed 
+                    ? 'bg-white/5 text-gray-500 border-white/5 cursor-not-allowed'
+                    : 'bg-white/10 text-white border-white/20 hover:bg-white/20 hover:scale-105'
+                }`}
+              >
+                {loadingFeed ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    Loading...
+                  </>
+                ) : 'Load More Deals'}
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <Insights />
+      )}
       </section>
 
       <footer className="border-t border-white/5 py-8 px-12 flex flex-col md:flex-row justify-between items-center text-xs text-gray-500 relative z-10 gap-4">

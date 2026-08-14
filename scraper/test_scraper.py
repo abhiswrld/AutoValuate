@@ -119,13 +119,18 @@ def extract_listing_data(listing):
     # Clean up the sub-city (e.g., "san jose downtown" -> "San Jose Downtown")
     location = location_tag.text.strip().lower()
 
-    # 6. Create and return dictionary
+    # 6. Get the main image
+    image_tag = listing.find("img")
+    image_url = image_tag.get('src') if image_tag else None
+
+    # 7. Create and return dictionary
     vehicle_stats = {
         "name": title_text,
         "url": url,
         "price": price,
         "mileage": mileage,
-        "location": location
+        "location": location,
+        "image_url": image_url
     }
 
     return vehicle_stats

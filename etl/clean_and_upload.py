@@ -53,7 +53,7 @@ def clean_and_upload():
     new_cars_df = cars_to_upload[~cars_to_upload['url'].isin(existing_urls)]
     
     # Make, Model, Trim, Cylinders, etc. are left out so they default to NULL in Postgres.
-    columns_to_upload = ['name', 'url', 'price', 'mileage', 'location', 'region', 'year', 'age']
+    columns_to_upload = ['name', 'url', 'price', 'mileage', 'location', 'region', 'year', 'age', 'image_url']
     cols_present = [col for col in columns_to_upload if col in new_cars_df.columns]
     new_cars_df = new_cars_df[cols_present]
     
