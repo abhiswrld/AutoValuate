@@ -86,7 +86,15 @@ function App() {
     
     if (region !== 'all') {
       axios.get(`${API_URL}/cities?region=${region}`)
-        .then(res => setAvailableCities(res.data))
+        .then(res => {
+          const data = res.data;
+          // Handle both old format (string[]) and new format ({name,count}[])
+          if (data.length > 0 && typeof data[0] === 'string') {
+            setAvailableCities(data.map(name => ({ name, count: null })));
+          } else {
+            setAvailableCities(data);
+          }
+        })
         .catch(err => console.error("Failed to load cities:", err));
     } else {
       setAvailableCities([]);
@@ -502,7 +510,7 @@ function App() {
                 }`}
               >
                 {city.name}
-                <span className={`text-[10px] ${selectedCity === city.name ? 'text-indigo-400/70' : 'text-gray-600'}`}>{city.count}</span>
+                {city.count != null && <span className={`text-[10px] ${selectedCity === city.name ? 'text-indigo-400/70' : 'text-gray-600'}`}>{city.count}</span>}
               </button>
             ))}
           </div>
