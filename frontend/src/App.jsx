@@ -499,14 +499,16 @@ function App() {
 
         {/* Row 2: Dynamic Sub-Cities */}
         {selectedRegion !== 'all' && availableCities.length > 0 && (
-          <div className="flex items-center gap-2 w-full flex-wrap mb-8 pl-2 border-l-2 border-indigo-600/50">
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-10 gap-3 w-full mb-10 p-4 bg-white/[0.02] border border-white/5 rounded-2xl items-center">
             <button
               onClick={() => {
                 setSelectedCity('all');
                 fetchFeed(selectedRegion, 'all');
               }}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-                selectedCity === 'all' ? 'bg-indigo-600/20 text-indigo-300' : 'text-gray-500 hover:text-white'
+              className={`w-full px-3 py-2 rounded-xl text-xs font-medium transition border flex justify-center items-center ${
+                selectedCity === 'all' 
+                  ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/30' 
+                  : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
               }`}
             >
               All Cities
@@ -518,12 +520,14 @@ function App() {
                   setSelectedCity(city.name);
                   fetchFeed(selectedRegion, city.name);
                 }}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition flex items-center gap-1.5 ${
-                  selectedCity === city.name ? 'bg-indigo-600/20 text-indigo-300' : 'text-gray-500 hover:text-white'
+                className={`w-full px-2 py-2 rounded-xl text-[11px] font-medium transition border flex justify-center items-center gap-1.5 truncate ${
+                  selectedCity === city.name 
+                    ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/30' 
+                    : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                {city.name}
-                {city.count != null && <span className={`text-[10px] ${selectedCity === city.name ? 'text-indigo-400/70' : 'text-gray-600'}`}>{city.count}</span>}
+                <span className="truncate">{city.name}</span>
+                {city.count != null && <span className={`shrink-0 ${selectedCity === city.name ? 'text-indigo-400/70' : 'text-gray-600'}`}>{city.count}</span>}
               </button>
             ))}
           </div>

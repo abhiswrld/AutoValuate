@@ -317,7 +317,10 @@ def get_market_feed(region: str = "all", city: str = "all"):
         base_query += " AND location = :city"
         params["city"] = city.title()
         
-    base_query += " LIMIT 300"
+    if region == "all" and city == "all":
+        base_query += " LIMIT 100"
+    else:
+        base_query += " LIMIT 300"
     
     df = pd.read_sql(text(base_query), db_engine, params=params)
     
