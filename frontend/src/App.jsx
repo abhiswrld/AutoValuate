@@ -492,16 +492,17 @@ function App() {
             </button>
             {availableCities.map((city) => (
               <button
-                key={city}
+                key={city.name}
                 onClick={() => {
-                  setSelectedCity(city);
-                  fetchFeed(selectedRegion, city);
+                  setSelectedCity(city.name);
+                  fetchFeed(selectedRegion, city.name);
                 }}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-                  selectedCity === city ? 'bg-indigo-600/20 text-indigo-300' : 'text-gray-500 hover:text-white'
+                className={`px-3 py-1 rounded-full text-xs font-medium transition flex items-center gap-1.5 ${
+                  selectedCity === city.name ? 'bg-indigo-600/20 text-indigo-300' : 'text-gray-500 hover:text-white'
                 }`}
               >
-                {city}
+                {city.name}
+                <span className={`text-[10px] ${selectedCity === city.name ? 'text-indigo-400/70' : 'text-gray-600'}`}>{city.count}</span>
               </button>
             ))}
           </div>
@@ -558,18 +559,19 @@ function App() {
                     whileHover={{ scale: 1.02 }}
                     className="relative h-96 rounded-2xl overflow-hidden border border-white/10 group cursor-pointer bg-gradient-to-br from-[#0f111a] to-[#0a0a0f] block shadow-lg"
                   >
-                    <div className="absolute top-5 left-5 z-20">
+                    {/* Location + Mileage stacked top-left */}
+                    <div className="absolute top-5 left-5 z-20 flex flex-col gap-2">
                       <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium">
                         <PinIcon className="w-3 h-3" />
                         {car.location}
                       </span>
-                    </div>
-
-                    {/* Mileage Top Right + Save Button */}
-                    <div className="absolute top-5 right-5 z-20 flex items-center gap-2">
-                      <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium">
+                      <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium w-fit">
                         {car.mileage.toLocaleString()} mi
                       </span>
+                    </div>
+
+                    {/* Save Button top-right */}
+                    <div className="absolute top-5 right-5 z-20">
                       <button 
                         onClick={(e) => {
                           e.preventDefault()

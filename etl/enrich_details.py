@@ -7,7 +7,6 @@ from sqlalchemy import create_engine, text
 import joblib
 from dotenv import load_dotenv
 
-# Load environment variables from .env file for the ENTIRE script
 load_dotenv() 
 
 def get_car_details(url):
@@ -171,7 +170,8 @@ def enrich_database():
                     SET condition = :cond, title_status = :title, 
                         cylinders = :cyl, drive = :drive, fuel = :fuel, 
                         transmission = :trans, type = :type,
-                        make = :make, model = :model, trim = :trim
+                        make = :make, model = :model, trim = :trim,
+                        location = COALESCE(:loc, location)
                     WHERE url = :url
                 """)
                 conn.execute(update_query, {
@@ -185,6 +185,7 @@ def enrich_database():
                     "make": details.get('make'),
                     "model": details.get('model'),
                     "trim": details.get('trim'),
+                    "loc": details.get('location'),
                     "url": url
                 })
                 updated_count += 1
