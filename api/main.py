@@ -318,9 +318,9 @@ def get_market_feed(region: str = "all", city: str = "all"):
         params["city"] = city.title()
         
     if region == "all" and city == "all":
-        base_query += " LIMIT 100"
+        base_query += " ORDER BY RANDOM() LIMIT 100"
     else:
-        base_query += " LIMIT 300"
+        base_query += " ORDER BY RANDOM() LIMIT 300"
     
     df = pd.read_sql(text(base_query), db_engine, params=params)
     

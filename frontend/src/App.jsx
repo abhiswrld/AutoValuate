@@ -559,7 +559,7 @@ function App() {
         )}
 
         {/* Title and Refresh Row */}
-        <div className="flex justify-between items-end mb-8 gap-4">
+        <div className="flex justify-between items-center mb-8 gap-4">
           <div className="flex items-center gap-4">
             <h3 className="text-3xl font-bold tracking-tight text-white">
               {showWatchlist ? "My Saved Cars" : "Market Feed"}
