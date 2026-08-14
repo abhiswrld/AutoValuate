@@ -318,13 +318,24 @@ def update_ai_prices():
     for col in cat_cols:
         df[col] = df[col].fillna('unspecified')
         
+    try:
+        avg_prices = pd.read_csv(os.path.join(project_root, 'api', 'avg_prices.csv'))
+        # Year needs to be numeric for merge
+        df['year'] = pd.to_numeric(df.get('year', 2015), errors='coerce').fillna(2015)
+        df = pd.merge(df, avg_prices, on=['year', 'make', 'model'], how='left')
+        df['avg_market_price'] = df['avg_market_price'].fillna(15000)
+    except Exception:
+        df['avg_market_price'] = 15000
+    
+    df['estimated_msrp'] = df['avg_market_price'] * (1 + 0.10 * df['age'])
+        
     features = ['age', 'make', 'model', 'trim', 'mileage', 'location', 'condition', 
-                'title_status', 'cylinders', 'drive', 'fuel', 'transmission', 'type']
+                'title_status', 'cylinders', 'drive', 'fuel', 'transmission', 'type', 'avg_market_price', 'estimated_msrp']
     X = df[features]
     
     cat_encoded = ohe.transform(X[['make', 'model', 'trim', 'location', 'condition', 'title_status', 'cylinders', 'drive', 'fuel', 'transmission', 'type']])
     cat_df = pd.DataFrame(cat_encoded, columns=ohe.get_feature_names_out(), index=X.index)
-    num_df = X[['age', 'mileage']]
+    num_df = X[['age', 'mileage', 'avg_market_price', 'estimated_msrp']]
     final_df = pd.concat([num_df, cat_df], axis=1)
     final_df = final_df.reindex(columns=model_columns, fill_value=0)
     

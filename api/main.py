@@ -307,6 +307,8 @@ def get_market_feed(region: str = "all", city: str = "all", sort_by: str = "best
         WHERE make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
         AND location IS NOT NULL AND location != 'null' AND TRIM(location) != '' AND location != 'Unknown'
         AND predicted_price IS NOT NULL AND predicted_price > 0
+        AND price >= 1000
+        AND difference < (predicted_price * 0.35)
     """
     params = {}
     
