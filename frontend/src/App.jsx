@@ -93,13 +93,18 @@ const GooglyEye = () => {
   return (
     <div 
       ref={eyeRef}
-      className="relative w-24 h-24 md:w-36 md:h-36 bg-white rounded-full flex items-center justify-center overflow-hidden border-8 border-[#0a0a0f] shadow-inner"
+      className="relative w-24 h-24 md:w-36 md:h-36 rounded-full flex items-center justify-center overflow-hidden border-[6px] border-[#0a0a0f] shadow-[inset_0_0_30px_rgba(255,255,255,0.15)] bg-gradient-to-br from-gray-800 via-gray-900 to-black"
     >
+      {/* Headlight Bulb */}
       <div 
         ref={pupilRef}
-        className="w-10 h-10 md:w-16 md:h-16 bg-[#0a0a0f] rounded-full"
-        style={{ transform: `translate3d(0px, 0px, 0)` }}
-      />
+        className="absolute w-10 h-10 md:w-14 md:h-14 rounded-full bg-[#fefce8] flex items-center justify-center z-10"
+        style={{ 
+          transform: `translate3d(0px, 0px, 0)`,
+          boxShadow: '0 0 30px 15px rgba(254, 240, 138, 0.3), inset 0 0 15px 5px rgba(255, 255, 255, 0.9)'
+        }}
+      >
+      </div>
     </div>
   );
 };
