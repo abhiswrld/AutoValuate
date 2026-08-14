@@ -140,8 +140,18 @@ def get_car_details(url):
         # VALIDATION: Check if the first word is a real make
         if len(parts) > 0 and parts[0].lower() in valid_makes:
             data['make'] = parts[0].lower()
-            data['model'] = parts[1].lower() if len(parts) > 1 else 'unspecified'
             
+            if len(parts) > 1:
+                raw_model = parts[1].lower()
+                clean_model = re.sub(r'[,.\-]+$', '', raw_model)
+                mapping = {
+                    'crv': 'cr-v', 'hrv': 'hr-v',
+                    'odessey': 'odyssey', 'oddysey': 'odyssey', 'odysey': 'odyssey'
+                }
+                data['model'] = mapping.get(clean_model, clean_model)
+            else:
+                data['model'] = 'unspecified'
+                
             if len(parts) > 2:
                 data['trim'] = parts[2].lower()
             else:

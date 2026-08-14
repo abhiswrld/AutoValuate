@@ -426,18 +426,23 @@ def get_makes():
 
 @app.get("/insights/models")
 def get_models(make: str):
-    if not db_engine:
-        return []
-    with db_engine.connect() as conn:
-        query = text("SELECT model, COUNT(*) as c FROM cars WHERE make = :make AND model IS NOT NULL AND model NOT IN ('unspecified', 'other', 'model', 'unknown', 'base') GROUP BY model HAVING COUNT(*) >= 2 ORDER BY model")
-        result = conn.execute(query, {"make": make}).fetchall()
+    try:
+        avg_prices = pd.read_csv('api/avg_prices.csv')
+        make_df = avg_prices[avg_prices['make'] == make.lower()]
+        unique_models = make_df['model'].dropna().unique().tolist()
+        
         models = []
-        for row in result:
-            m = row[0]
-            if make.lower() == 'tesla' and m in ['3', 's', 'x', 'y']:
-                m = f"{m}"
-            models.append(m)
+        for m in sorted(unique_models):
+            m_str = str(m).strip()
+            if m_str.lower() in ['unspecified', 'other', 'model', 'unknown', 'base']:
+                continue
+            if make.lower() == 'tesla' and m_str in ['3', 's', 'x', 'y']:
+                m_str = f"{m_str}"
+            models.append(m_str)
         return models
+    except Exception as e:
+        print(f"Error reading models: {e}")
+        return []
 
 @app.get("/insights/depreciation")
 def get_depreciation_curve(make: str, model_name: str):
