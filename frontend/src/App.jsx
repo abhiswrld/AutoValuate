@@ -225,7 +225,7 @@ function App() {
     setLoadingFeed(true)
     axios.get(`${API_URL}/feed?region=${region}&city=${city}&sort_by=${sort}&offset=${currentOffset}`)
       .then(res => {
-        if (res.data.length < 45) setHasMore(false)
+        if (res.data.length < 15) setHasMore(false)
         else setHasMore(true)
         
         if (append) {
@@ -837,7 +837,7 @@ function App() {
         {!showWatchlist && hasMore && feed.length > 0 && (
           <div className="flex justify-center mt-12 mb-4">
             <button
-              onClick={() => fetchFeed(selectedRegion, selectedCity, sortBy, offset + 45, true)}
+              onClick={() => fetchFeed(selectedRegion, selectedCity, sortBy, offset + 15, true)}
               disabled={loadingFeed}
               className={`px-8 py-3 rounded-full font-medium transition border flex items-center gap-3 ${
                 loadingFeed 

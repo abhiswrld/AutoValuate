@@ -331,7 +331,7 @@ def get_market_feed(region: str = "all", city: str = "all", sort_by: str = "best
     else:
         base_query += " ORDER BY difference DESC"
         
-    base_query += " LIMIT 45 OFFSET :offset"
+    base_query += " LIMIT 15 OFFSET :offset"
     params["offset"] = offset
     
     df = pd.read_sql(text(base_query), db_engine, params=params)
