@@ -53,36 +53,40 @@ const GooglyEye = () => {
   const pupilRef = useRef(null);
 
   useEffect(() => {
-    let animationFrameId;
+    let animationFrameId = null;
+    let currentX = 0;
+    let currentY = 0;
+
+    const updateEye = () => {
+      if (!eyeRef.current || !pupilRef.current) return;
+      const eye = eyeRef.current.getBoundingClientRect();
+      const eyeCenterX = eye.left + eye.width / 2;
+      const eyeCenterY = eye.top + eye.height / 2;
+      
+      const angle = Math.atan2(currentY - eyeCenterY, currentX - eyeCenterX);
+      const maxMove = eye.width / 4.5;
+      const dist = Math.hypot(currentX - eyeCenterX, currentY - eyeCenterY);
+      const move = Math.min(dist / 20, maxMove);
+
+      const x = Math.cos(angle) * move;
+      const y = Math.sin(angle) * move;
+
+      pupilRef.current.style.transform = `translate(${x}px, ${y}px)`;
+      animationFrameId = null;
+    };
 
     const handleMouseMove = (e) => {
-      if (!eyeRef.current || !pupilRef.current) return;
-      
-      const mouseX = e.clientX;
-      const mouseY = e.clientY;
-
-      animationFrameId = requestAnimationFrame(() => {
-        if (!eyeRef.current || !pupilRef.current) return;
-        const eye = eyeRef.current.getBoundingClientRect();
-        const eyeCenterX = eye.left + eye.width / 2;
-        const eyeCenterY = eye.top + eye.height / 2;
-        
-        const angle = Math.atan2(mouseY - eyeCenterY, mouseX - eyeCenterX);
-        const maxMove = eye.width / 4.5;
-        const dist = Math.hypot(mouseX - eyeCenterX, mouseY - eyeCenterY);
-        const move = Math.min(dist / 20, maxMove);
-
-        const x = Math.cos(angle) * move;
-        const y = Math.sin(angle) * move;
-
-        pupilRef.current.style.transform = `translate(${x}px, ${y}px)`;
-      });
+      currentX = e.clientX;
+      currentY = e.clientY;
+      if (!animationFrameId) {
+        animationFrameId = requestAnimationFrame(updateEye);
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
-      cancelAnimationFrame(animationFrameId);
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
     };
   }, []);
 
@@ -105,6 +109,66 @@ const GooglyEyesContainer = () => {
     <div className="flex gap-4 justify-center mt-6">
       <GooglyEye />
       <GooglyEye />
+    </div>
+  );
+};
+
+const SortDropdown = ({ sortBy, onSortChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  const options = [
+    { value: 'best', label: 'Best Deals' },
+    { value: 'price_low', label: 'Price: Low to High' },
+    { value: 'price_high', label: 'Price: High to Low' },
+    { value: 'mileage_low', label: 'Mileage: Lowest' }
+  ];
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedLabel = options.find(opt => opt.value === sortBy)?.label;
+
+  return (
+    <div className="relative flex items-center gap-3" ref={dropdownRef}>
+      <span className="text-[15px] text-gray-400 font-medium tracking-wide">Sort by:</span>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center justify-between gap-2 bg-[#0c0d12] border border-white/[0.08] hover:border-white/[0.15] text-white text-[15px] rounded-xl px-4 py-2.5 outline-none transition-all w-48 shadow-lg"
+      >
+        <span className="font-medium">{selectedLabel}</span>
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-50 right-0 top-[110%] w-56 rounded-xl bg-[#1f2029] border border-white/[0.08] shadow-[0_8px_30px_rgb(0,0,0,0.5)] py-2 overflow-hidden backdrop-blur-xl">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => {
+                onSortChange(option.value);
+                setIsOpen(false);
+              }}
+              className="w-full text-left px-4 py-2.5 text-[15px] text-gray-300 hover:bg-white/[0.06] hover:text-white transition-colors flex items-center gap-3"
+            >
+              <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                {sortBy === option.value && (
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg>
+                )}
+              </div>
+              <span className={sortBy === option.value ? "font-semibold text-white" : "font-medium"}>
+                {option.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -170,8 +234,7 @@ function App() {
       .finally(() => setLoadingFeed(false))
   }
 
-  const handleSortChange = (e) => {
-    const newSort = e.target.value;
+  const handleSortChange = (newSort) => {
     setSortBy(newSort);
     fetchFeed(selectedRegion, selectedCity, newSort, 0, false);
   }
@@ -667,19 +730,7 @@ function App() {
           </div>
           
           {!showWatchlist && (
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-sm text-gray-400 font-medium">Sort by:</span>
-              <select
-                value={sortBy}
-                onChange={handleSortChange}
-                className="bg-[#0a0a0f] border border-white/10 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block px-3 py-2 outline-none appearance-none"
-              >
-                <option value="best">Best Deals</option>
-                <option value="price_low">Price: Low to High</option>
-                <option value="price_high">Price: High to Low</option>
-                <option value="mileage_low">Mileage: Lowest</option>
-              </select>
-            </div>
+            <SortDropdown sortBy={sortBy} onSortChange={handleSortChange} />
           )}
         </div>
 
