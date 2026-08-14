@@ -48,26 +48,43 @@ const RefreshIcon = ({ className = 'w-4 h-4' }) => (
   </svg>
 )
 
-const GooglyEye = ({ mouseX, mouseY }) => {
+const GooglyEye = () => {
   const eyeRef = useRef(null);
-  const [pupilPos, setPupilPos] = useState({ x: 0, y: 0 });
+  const pupilRef = useRef(null);
 
   useEffect(() => {
-    if (!eyeRef.current) return;
-    const eye = eyeRef.current.getBoundingClientRect();
-    const eyeCenterX = eye.left + eye.width / 2;
-    const eyeCenterY = eye.top + eye.height / 2;
-    
-    const angle = Math.atan2(mouseY - eyeCenterY, mouseX - eyeCenterX);
-    const maxMove = eye.width / 4.5;
-    const dist = Math.hypot(mouseX - eyeCenterX, mouseY - eyeCenterY);
-    const move = Math.min(dist / 20, maxMove);
+    let animationFrameId;
 
-    setPupilPos({
-      x: Math.cos(angle) * move,
-      y: Math.sin(angle) * move
-    });
-  }, [mouseX, mouseY]);
+    const handleMouseMove = (e) => {
+      if (!eyeRef.current || !pupilRef.current) return;
+      
+      const mouseX = e.clientX;
+      const mouseY = e.clientY;
+
+      animationFrameId = requestAnimationFrame(() => {
+        if (!eyeRef.current || !pupilRef.current) return;
+        const eye = eyeRef.current.getBoundingClientRect();
+        const eyeCenterX = eye.left + eye.width / 2;
+        const eyeCenterY = eye.top + eye.height / 2;
+        
+        const angle = Math.atan2(mouseY - eyeCenterY, mouseX - eyeCenterX);
+        const maxMove = eye.width / 4.5;
+        const dist = Math.hypot(mouseX - eyeCenterX, mouseY - eyeCenterY);
+        const move = Math.min(dist / 20, maxMove);
+
+        const x = Math.cos(angle) * move;
+        const y = Math.sin(angle) * move;
+
+        pupilRef.current.style.transform = `translate(${x}px, ${y}px)`;
+      });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, []);
 
   return (
     <div 
@@ -75,28 +92,19 @@ const GooglyEye = ({ mouseX, mouseY }) => {
       className="relative w-24 h-24 md:w-36 md:h-36 bg-white rounded-full flex items-center justify-center overflow-hidden border-8 border-[#0a0a0f] shadow-inner"
     >
       <div 
+        ref={pupilRef}
         className="w-10 h-10 md:w-16 md:h-16 bg-[#0a0a0f] rounded-full transition-transform duration-75 ease-out"
-        style={{ transform: `translate(${pupilPos.x}px, ${pupilPos.y}px)` }}
+        style={{ transform: `translate(0px, 0px)` }}
       />
     </div>
   );
 };
 
 const GooglyEyesContainer = () => {
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-
-  useEffect(() => {
-    const handleMouseMove = (e) => {
-      setMousePos({ x: e.clientX, y: e.clientY });
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
-
   return (
     <div className="flex gap-4 justify-center mt-6">
-      <GooglyEye mouseX={mousePos.x} mouseY={mousePos.y} />
-      <GooglyEye mouseX={mousePos.x} mouseY={mousePos.y} />
+      <GooglyEye />
+      <GooglyEye />
     </div>
   );
 };
@@ -129,6 +137,10 @@ function App() {
   }
   const [availableCities, setAvailableCities] = useState([])
   const [showAllCities, setShowAllCities] = useState(false)
+  const [sortBy, setSortBy] = useState('best')
+  const [offset, setOffset] = useState(0)
+  const [loadingFeed, setLoadingFeed] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
   
   // Auth & Watchlist States
   const [showAuthModal, setShowAuthModal] = useState(false)
@@ -140,17 +152,36 @@ function App() {
   const [showWatchlist, setShowWatchlist] = useState(false)
   const [watchlistCars, setWatchlistCars] = useState([])
 
-  const fetchFeed = (region = selectedRegion, city = selectedCity) => {
-    axios.get(`${API_URL}/feed?region=${region}&city=${city}`)
-      .then(res => setFeed(res.data))
+  const fetchFeed = (region = selectedRegion, city = selectedCity, sort = sortBy, currentOffset = 0, append = false) => {
+    setLoadingFeed(true)
+    axios.get(`${API_URL}/feed?region=${region}&city=${city}&sort_by=${sort}&offset=${currentOffset}`)
+      .then(res => {
+        if (res.data.length < 45) setHasMore(false)
+        else setHasMore(true)
+        
+        if (append) {
+          setFeed(prev => [...prev, ...res.data])
+        } else {
+          setFeed(res.data)
+        }
+        setOffset(currentOffset)
+      })
       .catch(err => console.error("Failed to load feed:", err))
+      .finally(() => setLoadingFeed(false))
+  }
+
+  const handleSortChange = (e) => {
+    const newSort = e.target.value;
+    setSortBy(newSort);
+    fetchFeed(selectedRegion, selectedCity, newSort, 0, false);
   }
 
   const handleRegionClick = (region) => {
     setSelectedRegion(region);
     setSelectedCity('all');
     setShowAllCities(false);
-    fetchFeed(region, 'all');
+    setSortBy('best');
+    fetchFeed(region, 'all', 'best', 0, false);
     
     if (region !== 'all') {
       axios.get(`${API_URL}/cities?region=${region}`)
@@ -352,11 +383,13 @@ function App() {
     return 'bg-amber-300'
   }
 
-  const formatDifference = (difference) => {
+  const formatDifference = (difference, price, predicted) => {
     const isGoodDeal = difference > 0
-    const amount = Math.abs(difference / 1000).toFixed(1)
+    const absDiff = Math.abs(difference).toLocaleString(undefined, {maximumFractionDigits:0})
     return {
-            text: isGoodDeal ? `$${amount}k under AI prediction` : `$${amount}k over AI prediction`,
+      text: isGoodDeal 
+        ? `$${absDiff} under AI prediction` 
+        : `$${absDiff} over AI prediction`,
       colorClass: isGoodDeal ? 'text-emerald-300/90' : 'text-rose-300/90',
     }
   }
@@ -520,7 +553,7 @@ function App() {
                   {result.verdict}
                 </p>
                 <p className="text-sm font-bold text-black/70">
-                  {formatDifference(result.difference).text}
+                  {formatDifference(result.difference, result.listing_price, result.predicted_price).text}
                 </p>
               </div>
 
@@ -585,7 +618,8 @@ function App() {
                 key={city.name}
                 onClick={() => {
                   setSelectedCity(city.name);
-                  fetchFeed(selectedRegion, city.name);
+                  setSortBy('best');
+                  fetchFeed(selectedRegion, city.name, 'best', 0, false);
                 }}
                 className={`w-full px-3 py-2 rounded-xl text-[11px] font-medium transition border flex justify-between items-center gap-2 truncate ${
                   selectedCity === city.name 
@@ -633,13 +667,19 @@ function App() {
           </div>
           
           {!showWatchlist && (
-            <button
-              onClick={() => fetchFeed()}
-              className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:text-white transition rounded-lg text-sm font-medium shrink-0"
-            >
-              <RefreshIcon className="w-4 h-4" />
-              Refresh Feed
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-sm text-gray-400 font-medium">Sort by:</span>
+              <select
+                value={sortBy}
+                onChange={handleSortChange}
+                className="bg-[#0a0a0f] border border-white/10 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block px-3 py-2 outline-none appearance-none"
+              >
+                <option value="best">Best Deals</option>
+                <option value="price_low">Price: Low to High</option>
+                <option value="price_high">Price: High to Low</option>
+                <option value="mileage_low">Mileage: Lowest</option>
+              </select>
+            </div>
           )}
         </div>
 
@@ -696,6 +736,14 @@ function App() {
                       </div>
                     </div>
 
+                    {/* Hover Overlay */}
+                    <div className="absolute inset-0 bg-[#0a0a0f]/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-30 flex items-center justify-center pointer-events-none">
+                      <div className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold text-sm tracking-wide flex items-center gap-2 translate-y-4 group-hover:translate-y-0 transition-transform duration-300 shadow-xl">
+                        View on Craigslist
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                      </div>
+                    </div>
+
                     <div className="absolute inset-0 p-6 flex flex-col justify-end bg-gradient-to-t from-black via-black/60 to-transparent transition-all z-10">
                       <h4 className="text-2xl font-bold mb-6 text-white tracking-tight">{car.name}</h4>
 
@@ -729,6 +777,27 @@ function App() {
             }
           })()}
         </div>
+
+        {!showWatchlist && hasMore && feed.length > 0 && (
+          <div className="flex justify-center mt-12 mb-4">
+            <button
+              onClick={() => fetchFeed(selectedRegion, selectedCity, sortBy, offset + 45, true)}
+              disabled={loadingFeed}
+              className={`px-8 py-3 rounded-full font-medium transition border flex items-center gap-3 ${
+                loadingFeed 
+                  ? 'bg-white/5 text-gray-500 border-white/5 cursor-not-allowed'
+                  : 'bg-white/10 text-white border-white/20 hover:bg-white/20 hover:scale-105'
+              }`}
+            >
+              {loadingFeed ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                  Loading...
+                </>
+              ) : 'Load More Cars'}
+            </button>
+          </div>
+        )}
       </section>
 
       <footer className="border-t border-white/5 py-8 px-12 flex flex-col md:flex-row justify-between items-center text-xs text-gray-500 relative z-10 gap-4">

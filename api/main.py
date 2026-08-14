@@ -298,7 +298,7 @@ def get_cities(region: str):
     return [{"name": row[0].title(), "count": row[1]} for row in results]
 
 @app.get("/feed")
-def get_market_feed(region: str = "all", city: str = "all"):
+def get_market_feed(region: str = "all", city: str = "all", sort_by: str = "best", offset: int = 0):
     if not db_engine:
         return {"error": "Database not configured"}
         
@@ -317,10 +317,19 @@ def get_market_feed(region: str = "all", city: str = "all"):
         base_query += " AND location = :city"
         params["city"] = city.title()
         
-    if region == "all" and city == "all":
-        base_query += " ORDER BY RANDOM() LIMIT 100"
+    if sort_by == "best":
+        base_query += " ORDER BY difference DESC"
+    elif sort_by == "price_low":
+        base_query += " ORDER BY price ASC"
+    elif sort_by == "price_high":
+        base_query += " ORDER BY price DESC"
+    elif sort_by == "mileage_low":
+        base_query += " ORDER BY mileage ASC"
     else:
-        base_query += " ORDER BY RANDOM() LIMIT 300"
+        base_query += " ORDER BY difference DESC"
+        
+    base_query += " LIMIT 45 OFFSET :offset"
+    params["offset"] = offset
     
     df = pd.read_sql(text(base_query), db_engine, params=params)
     
