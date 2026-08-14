@@ -131,51 +131,67 @@ def get_car_details(url):
         data['model'] = None
         data['trim'] = 'unspecified'
 
-    # 3. Extract City from the URL (Stops at year OR car make!)
+    # 3. Extract City using Craigslist Meta Tags
     try:
-        url_path = url.split('/view/d/')[1]
-        parts = url_path.split('-')
+        data['location'] = 'Unknown'
+        clean_city = None
+        allowed_states = []
         
-        clean_city_parts = []
-        for part in parts:
-            if any(char.isdigit() for char in part):
-                break
-            if part.lower() in valid_makes:
-                break
-            clean_city_parts.append(part)
+        # 3a. Try getting exact city and state from metadata
+        meta_geo = soup.find('meta', attrs={'name': 'geo.placename'})
+        meta_region = soup.find('meta', attrs={'name': 'geo.region'})
+        
+        if meta_geo:
+            clean_city = clean_raw_location(meta_geo.get('content'))
             
-        if clean_city_parts:
-            raw_city = ' '.join(clean_city_parts)
-            clean_city = clean_raw_location(raw_city)
+        if meta_region:
+            region_content = meta_region.get('content') # e.g. "US-WA"
+            if region_content and '-' in region_content:
+                state_code = region_content.split('-')[1].upper()
+                allowed_states = [state_code]
+        
+        # 3b. Fallback to URL parsing if metadata missing
+        if not clean_city or not allowed_states:
+            # Fallback for city
+            if not clean_city:
+                try:
+                    url_path = url.split('/view/d/')[1]
+                    parts = url_path.split('-')
+                    clean_city_parts = []
+                    for part in parts:
+                        if any(char.isdigit() for char in part): break
+                        if part.lower() in valid_makes: break
+                        clean_city_parts.append(part)
+                    if clean_city_parts:
+                        clean_city = clean_raw_location(' '.join(clean_city_parts))
+                except: pass
+                
+            # Fallback for state via region map
+            if not allowed_states:
+                try:
+                    region_domain = url.split('//')[1].split('.')[0]
+                    if region_domain in REGION_TO_STATES:
+                        allowed_states = REGION_TO_STATES[region_domain]
+                except: pass
+                
+        # 3c. Attempt to map clean_city to actual US City
+        if clean_city and allowed_states:
+            allowed_cities_dict = {}
+            for state in allowed_states:
+                if state in CITIES_BY_STATE:
+                    allowed_cities_dict.update(CITIES_BY_STATE[state])
+                    
+            allowed_keys = list(allowed_cities_dict.keys())
             
-            # Find Region from URL
-            try:
-                region = url.split('//')[1].split('.')[0]
-            except:
-                region = 'unknown'
-                
-            data['location'] = 'Unknown'
-            
-            if clean_city and region in REGION_TO_STATES:
-                allowed_states = REGION_TO_STATES[region]
-                
-                # Build dict of allowed cities
-                allowed_cities_dict = {}
-                for state in allowed_states:
-                    if state in CITIES_BY_STATE:
-                        allowed_cities_dict.update(CITIES_BY_STATE[state])
-                        
-                allowed_keys = list(allowed_cities_dict.keys())
-                
-                # 1. Exact match
-                if clean_city in allowed_keys:
-                    data['location'] = allowed_cities_dict[clean_city]
-                # 2. Fuzzy match
-                elif allowed_keys:
-                    best_match = process.extractOne(clean_city, allowed_keys, scorer=fuzz.WRatio)
-                    if best_match and best_match[1] >= 85:
-                        data['location'] = allowed_cities_dict[best_match[0]]
-                        
+            # Exact match
+            if clean_city in allowed_keys:
+                data['location'] = allowed_cities_dict[clean_city]
+            # Fuzzy match
+            elif allowed_keys:
+                best_match = process.extractOne(clean_city, allowed_keys, scorer=fuzz.WRatio)
+                if best_match and best_match[1] >= 85:
+                    data['location'] = allowed_cities_dict[best_match[0]]
+                    
     except Exception as e:
         print(f"Failed to extract location: {e}")
         pass
