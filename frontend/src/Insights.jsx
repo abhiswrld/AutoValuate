@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import {
@@ -12,6 +12,32 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts';
+
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    // Scatter payload
+    if (data.url) {
+      return (
+        <div className="bg-[#0c0d12] border border-white/10 p-4 rounded-xl shadow-2xl backdrop-blur-md">
+          <p className="text-white font-bold mb-1">{data.year} Model</p>
+          <p className="text-gray-300 text-sm mb-1">{data.location}</p>
+          <p className="text-emerald-400 font-bold mb-1">${data.price?.toLocaleString()}</p>
+          <p className="text-gray-400 text-xs">{data.mileage?.toLocaleString()} miles</p>
+        </div>
+      );
+    }
+    // Line payload
+    return (
+      <div className="bg-[#0c0d12] border border-white/10 p-4 rounded-xl shadow-2xl backdrop-blur-md">
+        <p className="text-white font-bold mb-1">Year {label}</p>
+        <p className="text-indigo-400 font-bold text-sm">Predicted Value:</p>
+        <p className="text-white text-xl font-extrabold">${payload[0].value?.toLocaleString(undefined, {maximumFractionDigits:0})}</p>
+      </div>
+    );
+  }
+  return null;
+};
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -39,14 +65,14 @@ const Insights = () => {
         .then(res => setModels(res.data))
         .catch(err => console.error("Failed to load models:", err));
     } else {
-      setModels([]);
+      setTimeout(() => setModels([]), 0);
     }
   }, [selectedMake]);
 
   // Fetch graph data when both are selected
   useEffect(() => {
     if (selectedMake && selectedModel) {
-      setLoading(true);
+      setTimeout(() => setLoading(true), 0);
       Promise.all([
         axios.get(`${API_URL}/insights/depreciation?make=${selectedMake}&model_name=${selectedModel}`),
         axios.get(`${API_URL}/insights/live_data?make=${selectedMake}&model_name=${selectedModel}`)
@@ -60,32 +86,6 @@ const Insights = () => {
       });
     }
   }, [selectedMake, selectedModel]);
-
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      // Scatter payload
-      if (data.url) {
-        return (
-          <div className="bg-[#0c0d12] border border-white/10 p-4 rounded-xl shadow-2xl backdrop-blur-md">
-            <p className="text-white font-bold mb-1">{data.year} Model</p>
-            <p className="text-gray-300 text-sm mb-1">{data.location}</p>
-            <p className="text-emerald-400 font-bold mb-1">${data.price?.toLocaleString()}</p>
-            <p className="text-gray-400 text-xs">{data.mileage?.toLocaleString()} miles</p>
-          </div>
-        );
-      }
-      // Line payload
-      return (
-        <div className="bg-[#0c0d12] border border-white/10 p-4 rounded-xl shadow-2xl backdrop-blur-md">
-          <p className="text-white font-bold mb-1">Year {label}</p>
-          <p className="text-indigo-400 font-bold text-sm">Predicted Value:</p>
-          <p className="text-white text-xl font-extrabold">${payload[0].value?.toLocaleString(undefined, {maximumFractionDigits:0})}</p>
-        </div>
-      );
-    }
-    return null;
-  };
 
   return (
     <div className="w-full max-w-6xl mx-auto px-6 py-12 relative z-10">
