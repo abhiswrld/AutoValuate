@@ -358,7 +358,7 @@ def get_cities(region: str):
                 results.append({"name": city.title(), "count": count})
     
     results.sort(key=lambda x: x['count'], reverse=True)
-    return results
+    return results[:20]
 
 @app.get("/feed")
 def get_market_feed(region: str = "all", city: str = "all"):
@@ -368,6 +368,7 @@ def get_market_feed(region: str = "all", city: str = "all"):
     base_query = """
         SELECT * FROM cars 
         WHERE make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL
+        AND location IS NOT NULL AND location != 'null' AND TRIM(location) != ''
     """
     params = {}
     
@@ -379,13 +380,11 @@ def get_market_feed(region: str = "all", city: str = "all"):
         base_query += " AND LOWER(location) LIKE :city"
         params["city"] = f"%{city.lower()}%"
         
-    base_query += " LIMIT 100"
+    base_query += " LIMIT 300"
     
     df = pd.read_sql(text(base_query), db_engine, params=params)
     
-    if len(df) > 6:
-        df = df.sample(n=6)
-    elif len(df) == 0:
+    if len(df) == 0:
         return []
 
     # Force these columns to be numeric, convert all NaN/Infinity to 0
