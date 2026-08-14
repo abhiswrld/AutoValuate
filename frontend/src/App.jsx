@@ -71,7 +71,7 @@ const GooglyEye = () => {
       const x = Math.cos(angle) * move;
       const y = Math.sin(angle) * move;
 
-      pupilRef.current.style.transform = `translate(${x}px, ${y}px)`;
+      pupilRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
       animationFrameId = null;
     };
 
@@ -97,8 +97,8 @@ const GooglyEye = () => {
     >
       <div 
         ref={pupilRef}
-        className="w-10 h-10 md:w-16 md:h-16 bg-[#0a0a0f] rounded-full transition-transform duration-75 ease-out"
-        style={{ transform: `translate(0px, 0px)` }}
+        className="w-10 h-10 md:w-16 md:h-16 bg-[#0a0a0f] rounded-full"
+        style={{ transform: `translate3d(0px, 0px, 0)` }}
       />
     </div>
   );
