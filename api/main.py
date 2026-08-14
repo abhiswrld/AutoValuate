@@ -419,15 +419,29 @@ def get_models(make: str):
     if not db_engine:
         return []
     with db_engine.connect() as conn:
-        query = text("SELECT DISTINCT model FROM cars WHERE make = :make AND model IS NOT NULL ORDER BY model")
+        query = text("SELECT model, COUNT(*) as c FROM cars WHERE make = :make AND model IS NOT NULL AND model NOT IN ('unspecified', 'other', 'model', 'unknown', 'base') GROUP BY model HAVING COUNT(*) >= 2 ORDER BY model")
         result = conn.execute(query, {"make": make}).fetchall()
-        return [row[0] for row in result]
+        models = []
+        for row in result:
+            m = row[0]
+            if make.lower() == 'tesla' and m in ['3', 's', 'x', 'y']:
+                m = f"{m}"
+            models.append(m)
+        return models
 
 @app.get("/insights/depreciation")
 def get_depreciation_curve(make: str, model_name: str):
-    # Predict the value for the last 20 years
+    # Dynamically find the minimum year for this specific make/model to bound the chart
+    start_year = 2005
+    if db_engine:
+        with db_engine.connect() as conn:
+            query = text("SELECT MIN(year) FROM cars WHERE make = :make AND model = :model_name")
+            min_year = conn.execute(query, {"make": make, "model_name": model_name}).scalar()
+            if min_year and min_year > 2005:
+                start_year = int(min_year)
+    
     current_year = 2024
-    years = list(range(2005, 2025))
+    years = list(range(start_year, current_year + 1))
     
     # Create a synthetic dataframe
     synthetic_data = []

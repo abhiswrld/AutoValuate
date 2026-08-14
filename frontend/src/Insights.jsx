@@ -15,24 +15,27 @@ import {
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    // Scatter payload
-    if (data.url) {
-      return (
-        <div className="bg-[#0c0d12] border border-white/10 p-4 rounded-xl shadow-2xl backdrop-blur-md">
-          <p className="text-white font-bold mb-1">{data.year} Model</p>
-          <p className="text-gray-300 text-sm mb-1">{data.location}</p>
-          <p className="text-emerald-400 font-bold mb-1">${data.price?.toLocaleString()}</p>
-          <p className="text-gray-400 text-xs">{data.mileage?.toLocaleString()} miles</p>
-        </div>
-      );
-    }
-    // Line payload
+    const scatterData = payload.find(p => p.payload.url)?.payload;
+    const lineData = payload.find(p => !p.payload.url)?.payload || payload.find(p => p.dataKey === 'price' && !p.payload.url)?.payload;
+    const val = lineData?.value || payload[0]?.value;
+
     return (
-      <div className="bg-[#0c0d12] border border-white/10 p-4 rounded-xl shadow-2xl backdrop-blur-md">
-        <p className="text-white font-bold mb-1">Year {label}</p>
-        <p className="text-indigo-400 font-bold text-sm">Predicted Value:</p>
-        <p className="text-white text-xl font-extrabold">${payload[0].value?.toLocaleString(undefined, {maximumFractionDigits:0})}</p>
+      <div className="flex flex-col gap-2">
+        {scatterData && (
+          <div className="bg-[#0c0d12] border border-white/10 p-4 rounded-xl shadow-2xl backdrop-blur-md">
+            <p className="text-white font-bold mb-1">{scatterData.year} Model</p>
+            <p className="text-gray-300 text-sm mb-1">{scatterData.location}</p>
+            <p className="text-emerald-400 font-bold mb-1">${scatterData.price?.toLocaleString()}</p>
+            <p className="text-gray-400 text-xs">{scatterData.mileage?.toLocaleString()} miles</p>
+          </div>
+        )}
+        {val && (
+          <div className="bg-[#0c0d12] border border-indigo-500/20 p-4 rounded-xl shadow-2xl backdrop-blur-md">
+            <p className="text-white font-bold mb-1">Year {label || scatterData?.year}</p>
+            <p className="text-indigo-400 font-bold text-sm">Predicted Value:</p>
+            <p className="text-white text-xl font-extrabold">${val?.toLocaleString(undefined, {maximumFractionDigits:0})}</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -98,7 +101,7 @@ const Insights = () => {
           Market <span className="text-indigo-400">Insights</span>
         </h2>
         <p className="text-gray-400 text-lg max-w-2xl mx-auto font-light">
-          Visualize real-time depreciation curves and market arbitrage opportunities perfectly mapped by our AI.
+          Visualize real-time depreciation curves mapped by our AI.
         </p>
       </motion.div>
 
@@ -113,13 +116,17 @@ const Insights = () => {
         </select>
         
         <select 
-          className="bg-white/5 border border-white/10 text-white rounded-xl px-6 py-3 outline-none focus:border-indigo-500/60 backdrop-blur-md w-full md:w-64 cursor-pointer appearance-none disabled:opacity-50"
-          value={selectedModel}
-          onChange={e => setSelectedModel(e.target.value)}
-          disabled={!selectedMake}
+          value={selectedModel} 
+          onChange={(e) => setSelectedModel(e.target.value)}
+          disabled={!selectedMake || models.length === 0}
+          className="w-full sm:w-64 bg-transparent border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-50 appearance-none bg-[#0c0d12]"
         >
-          <option value="" className="bg-[#0c0d12]">Select Model...</option>
-          {models.map(m => <option key={m} value={m} className="bg-[#0c0d12]">{m.toUpperCase()}</option>)}
+          <option value="">Select Model...</option>
+          {models.map(m => (
+            <option key={m} value={m} className="bg-[#1a1b26]">
+              {(selectedMake === 'tesla' && ['3', 's', 'x', 'y'].includes(m.toLowerCase())) ? `Model ${m.toUpperCase()}` : m.toUpperCase()}
+            </option>
+          ))}
         </select>
       </div>
 
