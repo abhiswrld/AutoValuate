@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import axios from 'axios'
 import { supabase } from './supabaseClient'
@@ -47,6 +47,59 @@ const RefreshIcon = ({ className = 'w-4 h-4' }) => (
     <path d="M21 3v6h-6" />
   </svg>
 )
+
+const GooglyEye = ({ mouseX, mouseY }) => {
+  const eyeRef = useRef(null);
+  const [pupilPos, setPupilPos] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (!eyeRef.current) return;
+    const eye = eyeRef.current.getBoundingClientRect();
+    const eyeCenterX = eye.left + eye.width / 2;
+    const eyeCenterY = eye.top + eye.height / 2;
+    
+    const angle = Math.atan2(mouseY - eyeCenterY, mouseX - eyeCenterX);
+    const maxMove = eye.width / 4.5;
+    const dist = Math.hypot(mouseX - eyeCenterX, mouseY - eyeCenterY);
+    const move = Math.min(dist / 20, maxMove);
+
+    setPupilPos({
+      x: Math.cos(angle) * move,
+      y: Math.sin(angle) * move
+    });
+  }, [mouseX, mouseY]);
+
+  return (
+    <div 
+      ref={eyeRef}
+      className="relative w-12 h-12 md:w-[4.5rem] md:h-[4.5rem] bg-white rounded-full flex items-center justify-center overflow-hidden border-4 border-[#0a0a0f] shadow-inner"
+    >
+      <div 
+        className="w-5 h-5 md:w-7 md:h-7 bg-[#0a0a0f] rounded-full transition-transform duration-75 ease-out"
+        style={{ transform: `translate(${pupilPos.x}px, ${pupilPos.y}px)` }}
+      />
+    </div>
+  );
+};
+
+const GooglyEyesContainer = () => {
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      setMousePos({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  return (
+    <div className="flex gap-2 ml-4 self-end pb-3">
+      <GooglyEye mouseX={mousePos.x} mouseY={mousePos.y} />
+      <GooglyEye mouseX={mousePos.x} mouseY={mousePos.y} />
+    </div>
+  );
+};
 
 function App() {
   const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
@@ -348,10 +401,10 @@ function App() {
           className="inline-flex flex-col items-stretch text-center mb-6"
         >
           <h2 className="text-3xl md:text-[3.25rem] font-extrabold tracking-tighter text-white whitespace-nowrap">
-            Never overpay for a used car
+            Never overpay for a <span className="text-indigo-400">used car</span>
           </h2>
-          <div className="text-[6rem] md:text-[9.5rem] font-black text-white leading-none mt-1 tracking-tighter">
-            PERIOD.
+          <div className="flex justify-center items-end text-[6rem] md:text-[9.5rem] font-black text-white leading-none mt-1 tracking-tighter">
+            PERIOD<GooglyEyesContainer />
           </div>
         </motion.div>
 
