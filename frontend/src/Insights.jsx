@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import {
@@ -138,6 +138,17 @@ const Insights = () => {
     }
   }, [selectedMake, selectedModel]);
 
+  const annualDep = useMemo(() => {
+    if (!depreciationData || depreciationData.length < 2) return null;
+    const sorted = [...depreciationData].sort((a, b) => a.year - b.year);
+    const oldest = sorted[0];
+    const newest = sorted[sorted.length - 1];
+    const years = newest.year - oldest.year;
+    if (years === 0 || newest.price <= 0) return null;
+    const rate = Math.pow((oldest.price / newest.price), (1 / years)) - 1;
+    return (rate * 100).toFixed(1);
+  }, [depreciationData]);
+
   return (
     <div className="w-full max-w-6xl mx-auto px-6 py-12 relative z-10">
       <motion.div
@@ -183,12 +194,19 @@ const Insights = () => {
           </div>
         ) : (
           <div className="w-full h-full flex flex-col">
-            <div className="flex justify-center px-4 mb-2">
-              <div className="bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 rounded-full backdrop-blur-sm flex items-center gap-2">
+            <div className="flex justify-center px-4 mb-2 gap-3">
+              <div className="bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 rounded-full backdrop-blur-sm flex items-center">
                 <span className="text-indigo-200 text-xs font-medium tracking-wide">
                   AI Assumes: Clean Title • Good Condition • 12k miles/yr
                 </span>
               </div>
+              {annualDep && (
+                <div className="bg-fuchsia-500/10 border border-fuchsia-500/20 px-4 py-1.5 rounded-full backdrop-blur-sm flex items-center">
+                  <span className="text-fuchsia-200 text-xs font-medium tracking-wide">
+                    Annual Dep. {annualDep}%
+                  </span>
+                </div>
+              )}
             </div>
             <div className="flex-1 min-h-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -255,9 +273,22 @@ const Insights = () => {
         {/* Horizontal Panel for Listings Below Chart */}
         {selectedMake && selectedModel && !loading && (
           <div className="w-full h-auto bg-[#030308]/50 border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-2xl flex flex-col">
-            <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-4">
-              {hoveredYear ? `${hoveredYear} Market` : 'Market Listings'}
-            </h3>
+            <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4 border-b border-white/10 pb-4">
+              <h3 className="text-xl font-bold text-white whitespace-nowrap">
+                {hoveredYear ? `${hoveredYear} Market` : 'Market Listings'}
+              </h3>
+              
+              {hoveredYear && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-sm font-medium">
+                    AI Predicts: ${depreciationData.find(d => d.year === hoveredYear)?.price?.toLocaleString(undefined, {maximumFractionDigits: 0}) || 'N/A'}
+                  </span>
+                  <span className="bg-white/5 text-gray-300 border border-white/10 px-3 py-1 rounded-full text-sm font-medium">
+                    Est. Mileage: {((new Date().getFullYear() - hoveredYear) * 12000).toLocaleString()} mi
+                  </span>
+                </div>
+              )}
+            </div>
             
             <div className="w-full overflow-y-auto pb-4 pt-2 px-1 custom-scrollbar">
               {!hoveredYear ? (
