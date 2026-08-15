@@ -213,6 +213,7 @@ def process_url_task(job_id: str, url: str):
 
         # 6. Run through ML Model (13 Features!)
         input_data = {
+            "year": year,
             "age": age, "make": make, "model": model_name, "trim": trim,
             "mileage": mileage, "location": location, 
             "condition": specs['condition'], "title_status": specs['title_status'],
@@ -221,9 +222,20 @@ def process_url_task(job_id: str, url: str):
         }
         input_df = pd.DataFrame([input_data])
         
+        try:
+            avg_prices = pd.read_csv('api/avg_prices.csv')
+            input_df['year'] = pd.to_numeric(input_df['year'])
+            input_df = pd.merge(input_df, avg_prices, on=['year', 'make', 'model'], how='left')
+            input_df['avg_market_price'] = input_df['avg_market_price'].fillna(15000)
+        except Exception as e:
+            print("Error loading avg_prices in live evaluation:", e)
+            input_df['avg_market_price'] = 15000
+            
+        input_df['estimated_msrp'] = input_df['avg_market_price'] * (1 + 0.10 * input_df['age'])
+        
         cat_encoded = ohe.transform(input_df[['make', 'model', 'trim', 'location', 'condition', 'title_status', 'cylinders', 'drive', 'fuel', 'transmission', 'type']])
         cat_df = pd.DataFrame(cat_encoded, columns=ohe.get_feature_names_out(), index=input_df.index)
-        num_df = input_df[['age', 'mileage']]
+        num_df = input_df[['age', 'mileage', 'avg_market_price', 'estimated_msrp']]
         final_df = pd.concat([num_df, cat_df], axis=1)
         final_df = final_df.reindex(columns=model_columns, fill_value=0)
         
@@ -446,6 +458,9 @@ def get_models(make: str):
 
 @app.get("/insights/depreciation")
 def get_depreciation_curve(make: str, model_name: str):
+    import datetime
+    current_year = datetime.datetime.now().year
+    
     # Dynamically find the minimum year for this specific make/model to bound the chart
     start_year = 2005
     if db_engine:
@@ -453,9 +468,8 @@ def get_depreciation_curve(make: str, model_name: str):
             query = text("SELECT MIN(year) FROM cars WHERE make ILIKE :make AND model ILIKE :model_name")
             min_year = conn.execute(query, {"make": make, "model_name": model_name}).scalar()
             if min_year:
-                start_year = max(start_year, 1990)
+                start_year = max(int(min_year), 1990)
     
-    current_year = 2024
     years = list(range(start_year, current_year + 1))
     
     # Create a synthetic dataframe
@@ -464,6 +478,7 @@ def get_depreciation_curve(make: str, model_name: str):
         age = current_year - year
         mileage = age * 12000 # 12k miles per year average
         synthetic_data.append({
+            'year': year,
             'age': age,
             'make': make.lower(),
             'model': model_name.lower(),
@@ -477,8 +492,6 @@ def get_depreciation_curve(make: str, model_name: str):
             'fuel': 'gas',
             'transmission': 'automatic',
             'type': 'unspecified',
-            'avg_market_price': 15000, # Placeholder, model handles this
-            'estimated_msrp': 25000,
         })
         
     df_synth = pd.DataFrame(synthetic_data)
@@ -486,14 +499,14 @@ def get_depreciation_curve(make: str, model_name: str):
     # We need to fill the baseline market data (MSRP and AVG Price) correctly
     try:
         avg_prices = pd.read_csv('api/avg_prices.csv')
-        match = avg_prices[(avg_prices['make'] == make.lower()) & (avg_prices['model'] == model_name.lower())]
-        if not match.empty:
-            avg_price = match['avg_market_price'].values[0]
-            msrp = match['estimated_msrp'].values[0]
-            df_synth['avg_market_price'] = avg_price
-            df_synth['estimated_msrp'] = msrp
-    except:
-        pass
+        df_synth = pd.merge(df_synth, avg_prices, on=['year', 'make', 'model'], how='left')
+        df_synth['avg_market_price'] = df_synth['avg_market_price'].fillna(15000)
+    except Exception as e:
+        print("Error loading avg_prices in get_depreciation_curve:", e)
+        df_synth['avg_market_price'] = 15000
+        
+    # Calculate MSRP exactly like the training pipeline
+    df_synth['estimated_msrp'] = df_synth['avg_market_price'] * (1 + 0.10 * df_synth['age'])
         
     # Predict!
     try:
