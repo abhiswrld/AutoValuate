@@ -1,4 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, Request
 from pydantic import BaseModel
 import pandas as pd
 import joblib
@@ -8,11 +8,12 @@ from bs4 import BeautifulSoup
 from fastapi.middleware.cors import CORSMiddleware
 import datetime
 import os
-from fastapi import Response
+from fastapi import Response, HTTPException
 from sqlalchemy import create_engine, text
 import uuid
 from typing import List
-import os
+import requests
+import time
 from dotenv import load_dotenv, find_dotenv
 
 # Find the .env file in the root directory and load it
@@ -578,3 +579,49 @@ def get_live_data(make: str, model_name: str):
                 "location": location_str
             })
         return data
+
+class ReportSoldRequest(BaseModel):
+    url: str
+
+report_counts = {}
+RATE_LIMIT_MAX = 20
+RATE_LIMIT_WINDOW = 86400  # 24 hours
+
+@app.post("/api/report-sold")
+def report_sold(request: Request, payload: ReportSoldRequest):
+    client_ip = request.client.host
+    now = time.time()
+    
+    # Check rate limit
+    if client_ip in report_counts:
+        counts, reset_time = report_counts[client_ip]
+        if now > reset_time:
+            report_counts[client_ip] = (1, now + RATE_LIMIT_WINDOW)
+        elif counts >= RATE_LIMIT_MAX:
+            raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again tomorrow.")
+        else:
+            report_counts[client_ip] = (counts + 1, reset_time)
+    else:
+        report_counts[client_ip] = (1, now + RATE_LIMIT_WINDOW)
+        
+    url = payload.url
+    
+    # Real-time Verification
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code in [404, 410]:
+            # It's dead! Delete from DB
+            if db_engine:
+                with db_engine.begin() as conn:
+                    conn.execute(text("DELETE FROM cars WHERE url = :url"), {"url": url})
+            return {"status": "deleted", "message": "Successfully verified and deleted."}
+        else:
+            # Still alive or we got 403
+            return {"status": "alive", "message": "Listing still appears to be active."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

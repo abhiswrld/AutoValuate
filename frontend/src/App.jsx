@@ -222,6 +222,34 @@ function App() {
   const [showWatchlist, setShowWatchlist] = useState(false)
   const [watchlistCars, setWatchlistCars] = useState([])
 
+  const [reportingUrls, setReportingUrls] = useState({});
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const handleReportSold = (e, url) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setReportingUrls(prev => ({ ...prev, [url]: true }));
+    axios.post(`${API_URL}/api/report-sold`, { url })
+      .then(res => {
+        if (res.data.status === "deleted") {
+          setFeed(prev => prev.filter(car => car.url !== url));
+          setToastMessage("Verified & Removed! 🚫");
+        } else {
+          setToastMessage(res.data.message || "Still active!");
+        }
+        setTimeout(() => setToastMessage(null), 3000);
+      })
+      .catch(err => {
+        setToastMessage(err.response?.data?.detail || "Error verifying.");
+        setTimeout(() => setToastMessage(null), 3000);
+      })
+      .finally(() => {
+        setReportingUrls(prev => ({ ...prev, [url]: false }));
+      });
+  };
+
+
   const fetchFeed = (region = selectedRegion, city = selectedCity, sort = sortBy, currentOffset = 0, append = false) => {
     setLoadingFeed(true)
     axios.get(`${API_URL}/feed?region=${region}&city=${city}&sort_by=${sort}&offset=${currentOffset}`)
@@ -824,10 +852,20 @@ function App() {
                         </div>
                       </div>
 
-                      <div className="mt-2 pt-4 border-t border-white/10 flex justify-center">
+                      <div className="mt-2 pt-4 border-t border-white/10 flex justify-between items-center">
                         <span className={`text-sm font-bold tracking-wide ${diff.colorClass}`}>
                           {diff.text}
                         </span>
+                        
+                        <button 
+                          onClick={(e) => handleReportSold(e, car.url)}
+                          disabled={reportingUrls[car.url]}
+                          className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded text-xs font-semibold uppercase tracking-wider transition disabled:opacity-50 flex items-center gap-2 border border-red-500/20"
+                        >
+                          {reportingUrls[car.url] ? (
+                            <svg className="animate-spin h-3 w-3 text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                          ) : "🚫 Report Sold"}
+                        </button>
                       </div>
                     </div>
                   </motion.a>
