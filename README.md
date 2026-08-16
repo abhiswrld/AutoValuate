@@ -30,9 +30,9 @@ Instead of relying on static, pre-cleaned datasets, AutoValuate features a custo
 - **Nationwide Market Feed:** A dashboard of live listings automatically evaluated by the AI, displaying the listed price versus the predicted market value across major US cities.
 - **Sleek UI:** Built with Tailwind CSS and Framer Motion for a premium, responsive user experience.
 
-## V2 Roadmap (Work in Progress)
+## V2 Roadmap (Completed)
 
-AutoValuate is currently a functional V1 MVP. The following features and improvements are planned for V2 to transform the platform into a full-scale, production-ready application:
+AutoValuate has successfully implemented all V2 milestones, transforming the platform into a full-scale, production-ready application:
 
 ### Infrastructure & MLOps
 
@@ -48,10 +48,25 @@ AutoValuate is currently a functional V1 MVP. The following features and improve
 ### User Experience & Personalization
 
 - [x] ~~**User Authentication:** Adding Google OAuth and Email/Password login so users have personalized profiles.~~
-- [x] ~~**Watchlists & Alerts:** Allowing authenticated users to save specific cars to a personal watchlist to track price changes over time.~~ (Alerts coming in V3)
+- [x] ~~**Watchlists & Alerts:** Allowing authenticated users to save specific cars to a personal watchlist to track price changes over time.~~
 - [x] ~~**City Filtering:** Enabling users to select their preferred city/region to dynamically filter the Market Feed.~~
 
 ### Data Visualization
 
 - [x] ~~**Market Insights Dashboard:** Building out the Insights page with interactive charts (Recharts) showing price depreciation curves by make/model and the visual impact of mileage on price.~~
 - [x] ~~**Listing Image Integration:** Updating the scraper to capture the actual photos from Craigslist postings and using them as the background for the glassmorphism cards in the Market Feed.~~
+## V3 Roadmap (Planned)
+
+AutoValuate is continuously evolving. The following features are currently in active development or slated for the upcoming V3 release:
+
+### Real-Time Alerts & Notifications
+- [ ] **Watchlist Price Drops:** Implement a background CRON job to track price drops on saved cars and send automated email alerts to users.
+
+### Community Moderation & Data Quality
+- [x] ~~**Automated Dead Link Sweeping:** Implement a continuous background worker that verifies and purges sold/deleted Craigslist listings from the database to keep the feed pristine.~~
+- [x] ~~**Crowdsourced Reporting:** Allow authenticated users to flag dead listings directly from the UI, with strict database-backed rate limiting (20 reports per 6 hours) to prevent abuse.~~
+
+### Advanced AI Integration
+- [ ] **Conversational RAG Agent:** A natural language AI assistant that helps users find the perfect car with a chill, human-like personality. Users can ask queries like "reliable car near Cupertino under 20k", and the agent will use Retrieval-Augmented Generation to search the live database and recommend specific active listings.
+- [ ] **Computer Vision Valuation:** Use image recognition models to evaluate car condition directly from listing photos (e.g., detecting body damage or interior wear) to adjust the predicted price dynamically.
+- [ ] **VIN Decoder API:** Allow users to input a VIN to automatically fetch precise trim specs, original MSRP, and recall history.
