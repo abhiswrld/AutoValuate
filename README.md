@@ -53,5 +53,5 @@ AutoValuate is currently a functional V1 MVP. The following features and improve
 
 ### Data Visualization
 
-- [ ] **Market Insights Dashboard:** Building out the Insights page with interactive charts (Recharts) showing price depreciation curves by make/model and the visual impact of mileage on price.
-- [ ] **Listing Image Integration:** Updating the scraper to capture the actual photos from Craigslist postings and using them as the background for the glassmorphism cards in the Market Feed.
+- [x] ~~**Market Insights Dashboard:** Building out the Insights page with interactive charts (Recharts) showing price depreciation curves by make/model and the visual impact of mileage on price.~~
+- [x] ~~**Listing Image Integration:** Updating the scraper to capture the actual photos from Craigslist postings and using them as the background for the glassmorphism cards in the Market Feed.~~
