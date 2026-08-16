@@ -26,7 +26,7 @@ REGION_TO_STATES = {
 
 # Load US Cities grouped by state
 def load_cities_by_state():
-    csv_path = os.path.join(os.path.dirname(__file__), "..", "us_cities.csv")
+    csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "us_cities.csv")
     cities_by_state = {}
     if os.path.exists(csv_path):
         df_cities = pd.read_csv(csv_path)
@@ -59,7 +59,7 @@ STATE_TO_REGION = {
 
 def get_ca_region(city_name):
     try:
-        csv_path = os.path.join(os.path.dirname(__file__), "..", "us_cities.csv")
+        csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "us_cities.csv")
         df = pd.read_csv(csv_path)
         match = df[(df['STATE_CODE'] == 'CA') & (df['CITY'].str.lower() == city_name.lower())]
         if not match.empty:
