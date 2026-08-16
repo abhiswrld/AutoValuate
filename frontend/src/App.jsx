@@ -523,8 +523,8 @@ function App() {
           </span>
         </h1>
         <div className="flex items-center space-x-8 text-base font-medium text-gray-400">
-          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('feed') }} className={`transition ${activeTab === 'feed' ? 'text-white' : 'hover:text-white'}`}>Feed</a>
-          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('insights') }} className={`transition ${activeTab === 'insights' ? 'text-white' : 'hover:text-white'}`}>Insights</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('feed'); document.getElementById('main-content')?.scrollIntoView({ behavior: 'smooth' }); }} className={`transition ${activeTab === 'feed' ? 'text-white' : 'hover:text-white'}`}>Feed</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('insights'); document.getElementById('main-content')?.scrollIntoView({ behavior: 'smooth' }); }} className={`transition ${activeTab === 'insights' ? 'text-white' : 'hover:text-white'}`}>Insights</a>
           <a href={`${API_URL}/docs`} target="_blank" rel="noreferrer" className="hover:text-white transition">API</a>
           {user ? (
             <button onClick={handleLogout} className="px-4 py-1.5 bg-white/5 border border-white/10 text-white hover:bg-white/10 transition rounded-lg text-base">
@@ -674,6 +674,7 @@ function App() {
         )}
       </AnimatePresence>
 
+      <div id="main-content">
       {activeTab === 'feed' ? (
       <section id="feed" className="max-w-6xl mx-auto px-6 py-12 border-t border-white/5 relative z-10">
         {/* Row 1: Main Regions */}
@@ -932,6 +933,7 @@ function App() {
       ) : (
         <Insights />
       )}
+      </div>
 
       <footer className="border-t border-white/5 py-8 px-12 flex flex-col md:flex-row justify-between items-center text-xs text-gray-500 relative z-10 gap-4">
         <div>© {new Date().getFullYear()} AutoValuate. All rights reserved.</div>
