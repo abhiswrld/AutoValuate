@@ -64,7 +64,7 @@ AutoValuate is continuously evolving. The following features are currently in ac
 
 ### Community Moderation & Data Quality
 - [x] ~~**Automated Dead Link Sweeping:** Implement a continuous background worker that verifies and purges sold/deleted Craigslist listings from the database to keep the feed pristine.~~
-- [x] ~~**Crowdsourced Reporting:** Allow authenticated users to flag dead listings directly from the UI, with strict database-backed rate limiting (20 reports per 6 hours) to prevent abuse.~~
+- [x] ~~**Crowdsourced Reporting:** Allow authenticated users to flag dead listings directly from the UI.~~
 
 ### Advanced AI Integration
 - [ ] **Conversational RAG Agent:** A natural language AI assistant that helps users find the perfect car with a chill, human-like personality. Users can ask queries like "reliable car near Cupertino under 20k", and the agent will use Retrieval-Augmented Generation to search the live database and recommend specific active listings. The bot will also proactively send out email alerts if new cars pop up that match a user's saved collection or specific requests.
