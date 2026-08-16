@@ -57,7 +57,7 @@ AutoValuate has successfully implemented all V2 milestones, transforming the pla
 - [x] ~~**Listing Image Integration:** Updating the scraper to capture the actual photos from Craigslist postings and using them as the background for the glassmorphism cards in the Market Feed.~~
 ## V3 Roadmap (Planned)
 
-AutoValuate is continuously evolving. The following features are currently in active development or slated for the upcoming V3 release:
+AutoValuate is continuously evolving. The following features are currently in active development for the upcoming V3 release:
 
 ### Real-Time Alerts & Notifications
 - [ ] **Watchlist Price Drops:** Implement a background CRON job to track price drops on saved cars and send automated email alerts to users.
@@ -67,6 +67,6 @@ AutoValuate is continuously evolving. The following features are currently in ac
 - [x] ~~**Crowdsourced Reporting:** Allow authenticated users to flag dead listings directly from the UI, with strict database-backed rate limiting (20 reports per 6 hours) to prevent abuse.~~
 
 ### Advanced AI Integration
-- [ ] **Conversational RAG Agent:** A natural language AI assistant that helps users find the perfect car with a chill, human-like personality. Users can ask queries like "reliable car near Cupertino under 20k", and the agent will use Retrieval-Augmented Generation to search the live database and recommend specific active listings.
+- [ ] **Conversational RAG Agent:** A natural language AI assistant that helps users find the perfect car with a chill, human-like personality. Users can ask queries like "reliable car near Cupertino under 20k", and the agent will use Retrieval-Augmented Generation to search the live database and recommend specific active listings. The bot will also proactively send out email alerts if new cars pop up that match a user's saved collection or specific requests.
 - [ ] **Computer Vision Valuation:** Use image recognition models to evaluate car condition directly from listing photos (e.g., detecting body damage or interior wear) to adjust the predicted price dynamically.
 - [ ] **VIN Decoder API:** Allow users to input a VIN to automatically fetch precise trim specs, original MSRP, and recall history.
