@@ -816,6 +816,7 @@ function App() {
 
                     {/* Top Right Controls */}
                     <div className="absolute top-5 right-5 z-20 flex items-center gap-2">
+                      {user && (
                       <div className="relative flex justify-center group/tooltip opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
                         <button 
                           onClick={(e) => handleReportSold(e, car.url)}
@@ -833,7 +834,7 @@ function App() {
                           REPORT SOLD
                         </div>
                       </div>
-                    )}
+                      )}
                       <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
                         <span className="bg-indigo-600 text-white px-3 py-1.5 rounded-full font-bold text-xs tracking-wide flex items-center gap-1.5 shadow-lg">
                           View

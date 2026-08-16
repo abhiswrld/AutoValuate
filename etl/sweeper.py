@@ -16,7 +16,7 @@ HEADERS = {
 
 async def check_url(session, url, semaphore):
     async with semaphore:
-        # Wait 2 seconds before each request to respect Craigslist rate limits
+        # Wait 2 seconds before each request
         await asyncio.sleep(2)
         try:
             async with session.get(url, headers=HEADERS, timeout=10) as response:
