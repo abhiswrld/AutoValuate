@@ -582,29 +582,36 @@ def get_live_data(make: str, model_name: str):
 
 class ReportSoldRequest(BaseModel):
     url: str
+    user_id: str
 
-report_counts = {}
 RATE_LIMIT_MAX = 20
-RATE_LIMIT_WINDOW = 86400  # 24 hours
 
 @app.post("/api/report-sold")
-def report_sold(request: Request, payload: ReportSoldRequest):
-    client_ip = request.client.host
-    now = time.time()
-    
-    # Check rate limit
-    if client_ip in report_counts:
-        counts, reset_time = report_counts[client_ip]
-        if now > reset_time:
-            report_counts[client_ip] = (1, now + RATE_LIMIT_WINDOW)
-        elif counts >= RATE_LIMIT_MAX:
-            raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again tomorrow.")
-        else:
-            report_counts[client_ip] = (counts + 1, reset_time)
-    else:
-        report_counts[client_ip] = (1, now + RATE_LIMIT_WINDOW)
-        
+def report_sold(payload: ReportSoldRequest):
+    user_id = payload.user_id
     url = payload.url
+    
+    if not db_engine:
+        return {"status": "error", "message": "Database disconnected"}
+
+    with db_engine.begin() as conn:
+        # Check rate limit
+        result = conn.execute(text("SELECT report_count, reset_time FROM user_report_limits WHERE user_id = :uid"), {"uid": user_id}).fetchone()
+        
+        now = datetime.datetime.utcnow()
+        if result:
+            count, reset_time = result
+            if now > reset_time:
+                # Expired, reset it
+                new_reset = now + datetime.timedelta(hours=6)
+                conn.execute(text("UPDATE user_report_limits SET report_count = 1, reset_time = :rt WHERE user_id = :uid"), {"uid": user_id, "rt": new_reset})
+            elif count >= RATE_LIMIT_MAX:
+                raise HTTPException(status_code=429, detail="Cooldown active for 6 hours. Please try again later.")
+            else:
+                conn.execute(text("UPDATE user_report_limits SET report_count = report_count + 1 WHERE user_id = :uid"), {"uid": user_id})
+        else:
+            new_reset = now + datetime.timedelta(hours=6)
+            conn.execute(text("INSERT INTO user_report_limits (user_id, report_count, reset_time) VALUES (:uid, 1, :rt)"), {"uid": user_id, "rt": new_reset})
     
     # Real-time Verification
     headers = {

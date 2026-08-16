@@ -230,11 +230,12 @@ function App() {
     e.stopPropagation();
     
     setReportingUrls(prev => ({ ...prev, [url]: true }));
-    axios.post(`${API_URL}/api/report-sold`, { url })
+    if (!user) return;
+    axios.post(`${API_URL}/api/report-sold`, { url, user_id: user.id })
       .then(res => {
         if (res.data.status === "deleted") {
           setFeed(prev => prev.filter(car => car.url !== url));
-          setToastMessage("Verified & Removed! 🚫");
+          setToastMessage("Verified & Removed!");
         } else {
           setToastMessage(res.data.message || "Still active!");
         }
@@ -499,6 +500,20 @@ function App() {
 
   return (
     <div className="min-h-screen font-sans relative overflow-hidden">
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: -20, x: "-50%" }}
+            className="fixed top-10 left-1/2 z-[100] px-6 py-3 rounded-full bg-indigo-600/90 text-white font-medium border border-indigo-400/30 shadow-2xl backdrop-blur-md"
+          >
+            {toastMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <nav className="flex justify-between items-center px-12 py-6 border-b border-white/5 backdrop-blur-sm bg-black/20 z-10 relative">
         <h1 className="flex items-center gap-4">
@@ -801,6 +816,24 @@ function App() {
 
                     {/* Top Right Controls */}
                     <div className="absolute top-5 right-5 z-20 flex items-center gap-2">
+                      <div className="relative flex justify-center group/tooltip opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
+                        <button 
+                          onClick={(e) => handleReportSold(e, car.url)}
+                          disabled={reportingUrls[car.url]}
+                          className="p-1.5 rounded-full bg-red-500/10 hover:bg-red-500/30 backdrop-blur-md border border-red-500/30 text-red-400 shadow-lg transition-all disabled:opacity-50"
+                        >
+                          {reportingUrls[car.url] ? (
+                            <svg className="animate-spin h-4 w-4 text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"></path></svg>
+                          )}
+                        </button>
+                        {/* Tooltip */}
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-max px-2 py-1 bg-[#0a0a0a] border border-white/10 text-white text-[9px] font-bold uppercase tracking-[0.15em] rounded-md opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity shadow-xl">
+                          REPORT SOLD
+                        </div>
+                      </div>
+                    )}
                       <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
                         <span className="bg-indigo-600 text-white px-3 py-1.5 rounded-full font-bold text-xs tracking-wide flex items-center gap-1.5 shadow-lg">
                           View
@@ -821,6 +854,8 @@ function App() {
                         <svg className="w-4 h-4" fill={watchlist.includes(car.url) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
                       </button>
                     </div>
+
+
 
                     <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-0">
                       {car.image_url ? (
@@ -852,20 +887,10 @@ function App() {
                         </div>
                       </div>
 
-                      <div className="mt-2 pt-4 border-t border-white/10 flex justify-between items-center">
+                      <div className="mt-2 pt-4 border-t border-white/10 flex justify-center">
                         <span className={`text-sm font-bold tracking-wide ${diff.colorClass}`}>
                           {diff.text}
                         </span>
-                        
-                        <button 
-                          onClick={(e) => handleReportSold(e, car.url)}
-                          disabled={reportingUrls[car.url]}
-                          className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded text-xs font-semibold uppercase tracking-wider transition disabled:opacity-50 flex items-center gap-2 border border-red-500/20"
-                        >
-                          {reportingUrls[car.url] ? (
-                            <svg className="animate-spin h-3 w-3 text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                          ) : "🚫 Report Sold"}
-                        </button>
                       </div>
                     </div>
                   </motion.a>
