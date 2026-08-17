@@ -5,11 +5,18 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
 # Load environment variables
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
+
+if GMAIL_APP_PASSWORD:
+    GMAIL_APP_PASSWORD = GMAIL_APP_PASSWORD.replace(" ", "")
 
 if not DATABASE_URL:
     print("DATABASE_URL is not set.")
@@ -63,10 +70,10 @@ def get_users_watching(url):
         result = conn.execute(text(query), {"url": url})
         return [row[0] for row in result]
 
-def send_price_drop_email(email, car_details, old_price, new_price):
-    """Send HTML email using Resend API."""
-    if not RESEND_API_KEY:
-        print("RESEND_API_KEY not found. Skipping email to:", email)
+def send_price_drop_email(email_address, car_details, old_price, new_price):
+    """Send HTML email using Gmail SMTP."""
+    if not GMAIL_APP_PASSWORD:
+        print("GMAIL_APP_PASSWORD not found. Skipping email to:", email_address)
         return
 
     drop_amount = old_price - new_price
@@ -90,23 +97,25 @@ def send_price_drop_email(email, car_details, old_price, new_price):
     </div>
     """
 
-    payload = {
-        "from": "AutoValuate Alerts <onboarding@resend.dev>",
-        "to": [email],
-        "subject": f"Price Drop: {car_title} down by ${drop_amount:,}!",
-        "html": html_content
-    }
+    sender_email = "autovaluate.alerts@gmail.com"
     
-    headers = {
-        "Authorization": f"Bearer {RESEND_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"Price Drop: {car_title} down by ${drop_amount:,}!"
+    msg["From"] = f"AutoValuate Alerts <{sender_email}>"
+    msg["To"] = email_address
     
-    response = requests.post("https://api.resend.com/emails", json=payload, headers=headers)
-    if response.status_code in [200, 201]:
-        print(f"Successfully sent alert to {email}")
-    else:
-        print(f"Failed to send email to {email}: {response.text}")
+    part = MIMEText(html_content, "html")
+    msg.attach(part)
+    
+    try:
+        # Connect to Gmail SMTP server
+        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+        server.login(sender_email, GMAIL_APP_PASSWORD)
+        server.sendmail(sender_email, email_address, msg.as_string())
+        server.quit()
+        print(f"Successfully sent alert to {email_address}")
+    except Exception as e:
+        print(f"Failed to send email to {email_address}: {e}")
 
 def update_db_price(url, new_price):
     query = "UPDATE cars SET price = :price WHERE url = :url"

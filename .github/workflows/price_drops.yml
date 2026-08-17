@@ -27,6 +27,6 @@ jobs:
     - name: Run Price Drop Worker Script
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
       run: |
         python scripts/price_drop_worker.py
