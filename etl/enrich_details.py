@@ -354,7 +354,11 @@ def update_ai_prices():
     with engine.connect() as conn:
         query = text("""
             SELECT * FROM cars 
-            WHERE predicted_price IS NULL AND make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL
+            WHERE predicted_price IS NULL 
+            AND price IS NOT NULL 
+            AND make IS NOT NULL 
+            AND model IS NOT NULL 
+            AND trim IS NOT NULL
             LIMIT 500
         """)
         df = pd.read_sql(query, conn)
