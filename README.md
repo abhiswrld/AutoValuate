@@ -28,6 +28,7 @@ Instead of relying on static, pre-cleaned datasets, AutoValuate features a custo
 
 - **Live URL Valuation:** Paste any Craigslist URL to get an instant AI valuation and deal verdict.
 - **Nationwide Market Feed:** A dashboard of live listings automatically evaluated by the AI, displaying the listed price versus the predicted market value across major US cities.
+- **Automated Price Drop Alerts:** Save a car to your watchlist and receive an instant email notification if the seller drops the price on Craigslist.
 - **Sleek UI:** Built with Tailwind CSS and Framer Motion for a premium, responsive user experience.
 
 ## V2 Roadmap (Completed)
@@ -60,7 +61,7 @@ AutoValuate has successfully implemented all V2 milestones, transforming the pla
 AutoValuate is continuously evolving. The following features are currently in active development for the upcoming V3 release:
 
 ### Real-Time Alerts & Notifications
-- [ ] **Watchlist Price Drops:** Implement a background CRON job to track price drops on saved cars and send automated email alerts to users.
+- [x] ~~**Watchlist Price Drops:** Implement a background CRON job to track price drops on saved cars and send automated email alerts to users.~~
 
 ### Community Moderation & Data Quality
 - [x] ~~**Automated Dead Link Sweeping:** Implement a continuous background worker that verifies and purges sold/deleted Craigslist listings from the database to keep the feed pristine.~~
