@@ -74,14 +74,14 @@ def send_price_drop_email(email, car_details, old_price, new_price):
     
     html_content = f"""
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
-        <h2 style="color: #111827; margin-bottom: 20px;">Price Drop Alert! 🚨</h2>
+        <h2 style="color: #111827; margin-bottom: 20px;">Price Drop Alert!</h2>
         <p style="color: #374151; font-size: 16px;">Great news! A car on your AutoValuate watchlist just dropped in price.</p>
         
         <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <h3 style="margin: 0 0 10px 0; color: #111827;">{car_title}</h3>
             <p style="margin: 5px 0; color: #4b5563; text-decoration: line-through;">Old Price: ${old_price:,}</p>
             <p style="margin: 5px 0; color: #10b981; font-size: 20px; font-weight: bold;">New Price: ${new_price:,}</p>
-            <p style="margin: 10px 0 0 0; color: #374151; font-weight: bold;">Total Drop: ${drop_amount:,} 📉</p>
+            <p style="margin: 10px 0 0 0; color: #374151; font-weight: bold;">Total Drop: ${drop_amount:,}</p>
         </div>
         
         <a href="{car_details['car_url']}" style="display: inline-block; background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 10px;">View Listing on Craigslist</a>
