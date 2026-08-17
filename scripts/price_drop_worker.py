@@ -154,8 +154,11 @@ def process_watchlist():
             for email in users:
                 send_price_drop_email(email, car, db_price, live_price)
                 time.sleep(0.5) # Limit email send rate
+        elif live_price > db_price:
+            print(f"  -> PRICE INCREASE DETECTED. Silently updating DB: ${db_price} -> ${live_price}")
+            update_db_price(url, live_price)
         else:
-            print(f"  -> No drop. Live Price: ${live_price}")
+            print(f"  -> No change. Live Price: ${live_price}")
 
 if __name__ == "__main__":
     process_watchlist()
