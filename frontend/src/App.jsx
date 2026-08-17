@@ -153,7 +153,7 @@ const SortDropdown = ({ sortBy, onSortChange }) => {
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 right-0 top-[110%] w-56 rounded-xl bg-[#1f2029] border border-white/[0.08] shadow-[0_8px_30px_rgb(0,0,0,0.5)] py-2 overflow-hidden backdrop-blur-xl">
+        <div className="absolute z-50 right-0 top-[110%] w-48 rounded-xl bg-[#1f2029] border border-white/[0.08] shadow-[0_8px_30px_rgb(0,0,0,0.5)] py-2 overflow-hidden backdrop-blur-xl">
           {options.map((option) => (
             <button
               key={option.value}
@@ -161,13 +161,8 @@ const SortDropdown = ({ sortBy, onSortChange }) => {
                 onSortChange(option.value);
                 setIsOpen(false);
               }}
-              className="w-full text-left px-4 py-2.5 text-[15px] text-gray-300 hover:bg-white/[0.06] hover:text-white transition-colors flex items-center gap-3"
+              className="w-full text-left px-4 py-2.5 text-[15px] text-gray-300 hover:bg-white/[0.06] hover:text-white transition-colors flex items-center"
             >
-              <div className="w-4 h-4 flex items-center justify-center shrink-0">
-                {sortBy === option.value && (
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg>
-                )}
-              </div>
               <span className={sortBy === option.value ? "font-semibold text-white" : "font-medium"}>
                 {option.label}
               </span>
