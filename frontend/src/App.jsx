@@ -273,8 +273,8 @@ function App() {
     setSelectedRegion(region);
     setSelectedCity('all');
     setShowAllCities(false);
-    setSortBy('best');
-    fetchFeed(region, 'all', 'best', 0, false);
+    setSortBy('latest');
+    fetchFeed(region, 'all', 'latest', 0, false);
     
     if (region !== 'all') {
       axios.get(`${API_URL}/cities?region=${region}`)
@@ -727,8 +727,9 @@ function App() {
                 key={city.name}
                 onClick={() => {
                   setSelectedCity(city.name);
-                  setSortBy('best');
-                  fetchFeed(selectedRegion, city.name, 'best', 0, false);
+                  setShowAllCities(false);
+                  setSortBy('latest');
+                  fetchFeed(selectedRegion, city.name, 'latest', 0, false);
                 }}
                 className={`w-full px-3 py-2 rounded-xl text-[11px] font-medium transition border flex justify-between items-center gap-2 truncate ${
                   selectedCity === city.name 
