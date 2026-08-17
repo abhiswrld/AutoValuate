@@ -125,7 +125,6 @@ const SortDropdown = ({ sortBy, onSortChange }) => {
 
   const options = [
     { value: 'latest', label: 'Latest Listings' },
-    { value: 'best', label: 'Best Deals' },
     { value: 'price_low', label: 'Price: Low to High' },
     { value: 'price_high', label: 'Price: High to Low' },
     { value: 'mileage_low', label: 'Mileage: Lowest' }
