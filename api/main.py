@@ -345,7 +345,9 @@ def get_market_feed(region: str = "all", city: str = "all", sort_by: str = "best
         base_query += " AND location = :city"
         params["city"] = city.title()
         
-    if sort_by == "best":
+    if sort_by == "latest":
+        base_query += " ORDER BY created_at DESC"
+    elif sort_by == "best":
         base_query += " ORDER BY difference DESC"
     elif sort_by == "price_low":
         base_query += " ORDER BY price ASC"
@@ -354,7 +356,7 @@ def get_market_feed(region: str = "all", city: str = "all", sort_by: str = "best
     elif sort_by == "mileage_low":
         base_query += " ORDER BY mileage ASC"
     else:
-        base_query += " ORDER BY difference DESC"
+        base_query += " ORDER BY created_at DESC"
         
     base_query += " LIMIT 15 OFFSET :offset"
     params["offset"] = offset

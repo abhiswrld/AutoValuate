@@ -124,6 +124,7 @@ const SortDropdown = ({ sortBy, onSortChange }) => {
   const dropdownRef = useRef(null);
 
   const options = [
+    { value: 'latest', label: 'Latest Listings' },
     { value: 'best', label: 'Best Deals' },
     { value: 'price_low', label: 'Price: Low to High' },
     { value: 'price_high', label: 'Price: High to Low' },
@@ -202,7 +203,7 @@ function App() {
   }
   const [availableCities, setAvailableCities] = useState([])
   const [showAllCities, setShowAllCities] = useState(false)
-  const [sortBy, setSortBy] = useState('best')
+  const [sortBy, setSortBy] = useState('latest')
   const [offset, setOffset] = useState(0)
   const [loadingFeed, setLoadingFeed] = useState(false)
   const [hasMore, setHasMore] = useState(true)
