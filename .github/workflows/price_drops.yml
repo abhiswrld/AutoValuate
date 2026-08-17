@@ -1,0 +1,32 @@
+name: Watchlist Price Drops Worker
+
+on:
+  schedule:
+    # Run every 12 hours (at 00:00 and 12:00 UTC)
+    - cron: '0 0,12 * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  check-prices:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests beautifulsoup4 sqlalchemy psycopg2-binary python-dotenv
+
+    - name: Run Price Drop Worker Script
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      run: |
+        python scripts/price_drop_worker.py
