@@ -330,7 +330,9 @@ def get_market_feed(region: str = "all", city: str = "all", sort_by: str = "best
         WHERE make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
         AND location IS NOT NULL AND location != 'null' AND TRIM(location) != '' AND location != 'Unknown'
         AND predicted_price IS NOT NULL AND predicted_price > 0
-        AND price >= 1000
+        AND price >= 1500
+        AND price NOT IN (1234, 12345, 1111, 2222)
+        AND year >= 1996
         AND difference > 0
     """
     params = {}
