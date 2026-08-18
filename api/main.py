@@ -227,10 +227,26 @@ def process_url_task(job_id: str, url: str):
             avg_prices = pd.read_csv('api/avg_prices.csv')
             input_df['year'] = pd.to_numeric(input_df['year'])
             input_df = pd.merge(input_df, avg_prices, on=['year', 'make', 'model'], how='left')
-            input_df['avg_market_price'] = input_df['avg_market_price'].fillna(15000)
+            
+            make_model_prices = avg_prices[(avg_prices['make'] == make.lower()) & (avg_prices['model'] == model_name.lower())]
+            if not make_model_prices.empty:
+                max_year_row = make_model_prices.loc[make_model_prices['year'].idxmax()]
+                max_year = max_year_row['year']
+                max_price = max_year_row['avg_market_price']
+                
+                def fill_price(row):
+                    if pd.isna(row['avg_market_price']):
+                        if row['year'] > max_year:
+                            return max_price * (1.05 ** (row['year'] - max_year))
+                        else:
+                            return max_price * (0.95 ** (max_year - row['year']))
+                    return row['avg_market_price']
+                input_df['avg_market_price'] = input_df.apply(fill_price, axis=1)
+            else:
+                input_df['avg_market_price'] = input_df['avg_market_price'].fillna(25000)
         except Exception as e:
             print("Error loading avg_prices in live evaluation:", e)
-            input_df['avg_market_price'] = 15000
+            input_df['avg_market_price'] = 25000
             
         input_df['estimated_msrp'] = input_df['avg_market_price'] * (1 + 0.10 * input_df['age'])
         
@@ -525,10 +541,26 @@ def get_depreciation_curve(make: str, model_name: str):
     try:
         avg_prices = pd.read_csv('api/avg_prices.csv')
         df_synth = pd.merge(df_synth, avg_prices, on=['year', 'make', 'model'], how='left')
-        df_synth['avg_market_price'] = df_synth['avg_market_price'].fillna(15000)
+        
+        make_model_prices = avg_prices[(avg_prices['make'] == make.lower()) & (avg_prices['model'] == model_name.lower())]
+        if not make_model_prices.empty:
+            max_year_row = make_model_prices.loc[make_model_prices['year'].idxmax()]
+            max_year = max_year_row['year']
+            max_price = max_year_row['avg_market_price']
+            
+            def fill_price(row):
+                if pd.isna(row['avg_market_price']):
+                    if row['year'] > max_year:
+                        return max_price * (1.05 ** (row['year'] - max_year))
+                    else:
+                        return max_price * (0.95 ** (max_year - row['year']))
+                return row['avg_market_price']
+            df_synth['avg_market_price'] = df_synth.apply(fill_price, axis=1)
+        else:
+            df_synth['avg_market_price'] = df_synth['avg_market_price'].fillna(25000)
     except Exception as e:
         print("Error loading avg_prices in get_depreciation_curve:", e)
-        df_synth['avg_market_price'] = 15000
+        df_synth['avg_market_price'] = 25000
         
     # Calculate MSRP exactly like the training pipeline
     df_synth['estimated_msrp'] = df_synth['avg_market_price'] * (1 + 0.10 * df_synth['age'])
