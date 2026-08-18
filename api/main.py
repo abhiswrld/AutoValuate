@@ -442,20 +442,41 @@ def get_makes():
 
 @app.get("/insights/models")
 def get_models(make: str):
+    import re
     try:
         avg_prices = pd.read_csv('api/avg_prices.csv')
         make_df = avg_prices[avg_prices['make'] == make.lower()]
         unique_models = make_df['model'].dropna().unique().tolist()
         
-        models = []
-        for m in sorted(unique_models):
-            m_str = str(m).strip()
-            if m_str.lower() in ['unspecified', 'other', 'model', 'unknown', 'base']:
+        models = set()
+        for m in unique_models:
+            m_str = str(m).strip().lower()
+            # Remove trailing punctuation
+            m_str = re.sub(r'[,.\-]+$', '', m_str)
+            
+            # Extract first word if it's too long or has weird characters
+            if len(m_str) > 20 or ' ' in m_str or '.' in m_str:
+                parts = m_str.replace(',', ' ').replace('.', ' ').split()
+                if parts:
+                    m_str = parts[0]
+                    
+            mapping = {
+                'crv': 'cr-v', 'hrv': 'hr-v', 
+                'odessey': 'odyssey', 'oddysey': 'odyssey', 'odysey': 'odyssey'
+            }
+            if m_str in mapping:
+                m_str = mapping[m_str]
+                
+            if m_str in ['unspecified', 'other', 'model', 'unknown', 'base', '']:
                 continue
+                
             if make.lower() == 'tesla' and m_str in ['3', 's', 'x', 'y']:
                 m_str = f"{m_str}"
-            models.append(m_str)
-        return models
+                
+            # The frontend probably capitalizes it, but we'll send it clean
+            models.add(m_str)
+            
+        return sorted(list(models))
     except Exception as e:
         print(f"Error reading models: {e}")
         return []
