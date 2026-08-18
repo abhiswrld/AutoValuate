@@ -333,7 +333,6 @@ def get_market_feed(region: str = "all", city: str = "all", sort_by: str = "best
         AND price >= 1500
         AND price NOT IN (1234, 12345, 1111, 2222)
         AND year >= 1996
-        AND difference > 0
     """
     params = {}
     
