@@ -182,7 +182,16 @@ function App() {
   const [error, setError] = useState('')
   const [feed, setFeed] = useState([])
   const [activeTab, setActiveTab] = useState('feed')
+  const [insightMake, setInsightMake] = useState('')
+  const [insightModel, setInsightModel] = useState('')
   const [progress, setProgress] = useState(0)
+
+  const navigateToInsights = (make, model) => {
+    setInsightMake(make);
+    setInsightModel(model);
+    setActiveTab('insights');
+    document.getElementById('main-content')?.scrollIntoView({ behavior: 'smooth' });
+  };
   const [jobId, setJobId] = useState(null)
   const [regionCounts, setRegionCounts] = useState({})
   const [selectedRegion, setSelectedRegion] = useState('sfbay')
@@ -202,6 +211,7 @@ function App() {
   }
   const [availableCities, setAvailableCities] = useState([])
   const [showAllCities, setShowAllCities] = useState(false)
+  const [citySearchQuery, setCitySearchQuery] = useState('')
   const [sortBy, setSortBy] = useState('latest')
   const [offset, setOffset] = useState(0)
   const [loadingFeed, setLoadingFeed] = useState(false)
@@ -273,6 +283,7 @@ function App() {
     setSelectedRegion(region);
     setSelectedCity('all');
     setShowAllCities(false);
+    setCitySearchQuery('');
     setSortBy('latest');
     fetchFeed(region, 'all', 'latest', 0, false);
     
@@ -354,6 +365,40 @@ function App() {
       authListener.subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      // Don't do anything if we haven't loaded cities yet
+      if (!availableCities.length) return;
+
+      const query = citySearchQuery.trim().toLowerCase();
+      if (!query) {
+        if (selectedCity !== 'all') {
+          setSelectedCity('all');
+          fetchFeed(selectedRegion, 'all', 'latest', 0, false);
+        }
+        return;
+      }
+      
+      let match = availableCities.find(c => c.name.toLowerCase() === query);
+      if (!match) {
+        match = availableCities.find(c => c.name.toLowerCase().startsWith(query));
+      }
+      if (!match) {
+        match = availableCities.find(c => c.name.toLowerCase().includes(query));
+      }
+
+      const targetCity = match ? match.name : 'all';
+
+      if (selectedCity !== targetCity) {
+        setSelectedCity(targetCity);
+        setSortBy('latest'); 
+        fetchFeed(selectedRegion, targetCity, 'latest', 0, false);
+      }
+    }, 400);
+
+    return () => clearTimeout(handler);
+  }, [citySearchQuery, availableCities, selectedRegion, selectedCity]);
 
   const handleAuth = async (e) => {
     e.preventDefault()
@@ -709,9 +754,24 @@ function App() {
         {/* Row 2: Dynamic Sub-Cities */}
         {selectedRegion !== 'all' && availableCities.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 w-full mb-10 p-4 bg-white/[0.02] border border-white/5 rounded-2xl items-center">
+            <div className="relative w-full col-span-2 sm:col-span-3 md:col-span-2 lg:col-span-2">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="Search cities..."
+                value={citySearchQuery}
+                onChange={(e) => setCitySearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 rounded-xl text-[12px] font-medium transition border flex justify-center items-center bg-white/5 text-gray-300 border-white/10 hover:bg-white/10 focus:outline-none focus:border-indigo-500/50 focus:bg-indigo-600/10 placeholder-gray-500"
+              />
+            </div>
             <button
               onClick={() => {
                 setSelectedCity('all');
+                setCitySearchQuery('');
                 fetchFeed(selectedRegion, 'all');
               }}
               className={`w-full px-3 py-2 rounded-xl text-xs font-medium transition border flex justify-center items-center ${
@@ -722,13 +782,17 @@ function App() {
             >
               All Cities
             </button>
-            {(showAllCities ? availableCities : availableCities.filter(c => (c.count || 0) >= 10)).map((city) => (
+            {(citySearchQuery 
+              ? availableCities.filter(c => c.name.toLowerCase().includes(citySearchQuery.toLowerCase()))
+              : (showAllCities ? availableCities : availableCities.filter(c => (c.count || 0) >= 10))
+            ).map((city) => (
               <button
                 key={city.name}
                 onClick={() => {
                   setSelectedCity(city.name);
                   setShowAllCities(false);
                   setSortBy('latest');
+                  setCitySearchQuery(city.name);
                   fetchFeed(selectedRegion, city.name, 'latest', 0, false);
                 }}
                 className={`w-full px-3 py-2 rounded-xl text-[11px] font-medium transition border flex justify-between items-center gap-2 truncate ${
@@ -742,7 +806,7 @@ function App() {
               </button>
             ))}
             
-            {availableCities.filter(c => (c.count || 0) < 10).length > 0 && (
+            {!citySearchQuery && availableCities.filter(c => (c.count || 0) < 10).length > 0 && (
               <button
                 onClick={() => setShowAllCities(!showAllCities)}
                 className="w-full px-3 py-2 rounded-xl text-[11px] font-medium transition border flex justify-center items-center gap-2 truncate bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white"
@@ -812,7 +876,8 @@ function App() {
                     </div>
 
                     {/* Top Right Controls */}
-                    <div className="absolute top-5 right-5 z-20 flex items-center gap-2">
+                    <div className="absolute top-5 right-5 z-20 flex flex-col items-end gap-2">
+                      <div className="flex items-center gap-2">
                       {user && (
                       <div className="relative flex justify-center group/tooltip opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
                         <button 
@@ -851,6 +916,21 @@ function App() {
                       >
                         <svg className="w-4 h-4" fill={watchlist.includes(car.url) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
                       </button>
+                      </div>
+                      
+                      <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0 w-full">
+                        <button 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            navigateToInsights(car.make, car.model);
+                          }}
+                          className="w-full bg-[#0a0a0f]/95 hover:bg-indigo-600 border border-white/10 hover:border-indigo-400 text-indigo-300 hover:text-white px-3 py-1.5 rounded-full font-bold text-xs tracking-wide flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(0,0,0,0.8)] backdrop-blur-xl transition"
+                        >
+                          Show Insights
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                        </button>
+                      </div>
                     </div>
 
 
@@ -927,7 +1007,7 @@ function App() {
         )}
       </section>
       ) : (
-        <Insights />
+        <Insights initialMake={insightMake} initialModel={insightModel} />
       )}
       </div>
 

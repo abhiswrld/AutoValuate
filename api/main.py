@@ -334,7 +334,21 @@ def get_cities(region: str):
         """)
         results = conn.execute(query, {"region": region}).fetchall()
         
-    return [{"name": row[0].title(), "count": row[1]} for row in results]
+    city_counts = {}
+    for row in results:
+        name = str(row[0]).title()
+        count = int(row[1])
+        if name in city_counts:
+            city_counts[name] += count
+        else:
+            city_counts[name] = count
+            
+    sorted_cities = sorted(
+        [{"name": k, "count": v} for k, v in city_counts.items()],
+        key=lambda x: x["count"],
+        reverse=True
+    )
+    return sorted_cities
 
 @app.get("/feed")
 def get_market_feed(region: str = "all", city: str = "all", sort_by: str = "best", offset: int = 0):
@@ -396,6 +410,8 @@ def get_market_feed(region: str = "all", city: str = "all", sort_by: str = "best
             
         feed_data.append({
             "name": clean_name,
+            "make": str(row.get('make', '')).lower(),
+            "model": str(row.get('model', '')).lower(),
             "mileage": int(row['mileage']),
             "location": clean_location(row.get('location', 'unknown')),
             "list_price": float(row['price']),
@@ -436,6 +452,8 @@ def get_watchlist_cars(urls: List[str]):
         
         feed_data.append({
             "name": clean_name,
+            "make": str(row.get('make', '')).lower(),
+            "model": str(row.get('model', '')).lower(),
             "mileage": int(row['mileage']),
             "location": str(row.get('location', 'unknown')).title(),
             "list_price": float(row['price']),
@@ -509,7 +527,9 @@ def get_depreciation_curve(make: str, model_name: str):
             query = text("SELECT MIN(year) FROM cars WHERE make ILIKE :make AND model ILIKE :model_name")
             min_year = conn.execute(query, {"make": make, "model_name": model_name}).scalar()
             if min_year:
-                start_year = max(int(min_year), 1990)
+                # Extend the synthetic curve 8 years further back to ensure the line covers 
+                # extreme high-mileage outliers in the live data
+                start_year = max(int(min_year) - 8, 1990)
     
     years = list(range(start_year, current_year + 1))
     
@@ -548,14 +568,17 @@ def get_depreciation_curve(make: str, model_name: str):
             max_year = max_year_row['year']
             max_price = max_year_row['avg_market_price']
             
-            def fill_price(row):
-                if pd.isna(row['avg_market_price']):
-                    if row['year'] > max_year:
-                        return max_price * (1.05 ** (row['year'] - max_year))
-                    else:
-                        return max_price * (0.95 ** (max_year - row['year']))
-                return row['avg_market_price']
-            df_synth['avg_market_price'] = df_synth.apply(fill_price, axis=1)
+            def fill_smooth_price(row):
+                if row['year'] >= current_year - 1:
+                    # Apply a 30% "Brand New Premium" to correctly anchor the MSRP 
+                    # because the dataset's max_price is based on depreciated used listings.
+                    return max_price * 1.30 * (1.05 ** (row['year'] - max_year))
+                elif row['year'] > max_year:
+                    return max_price * (1.05 ** (row['year'] - max_year))
+                else:
+                    # 6% steady baseline decay backward
+                    return max_price * (0.94 ** (max_year - row['year']))
+            df_synth['avg_market_price'] = df_synth.apply(fill_smooth_price, axis=1)
         else:
             df_synth['avg_market_price'] = df_synth['avg_market_price'].fillna(25000)
     except Exception as e:
@@ -579,9 +602,12 @@ def get_depreciation_curve(make: str, model_name: str):
         
         curve = []
         for i, year in enumerate(years):
+            age = current_year - year
+            mileage = age * 12000
             curve.append({
                 "year": year,
-                "price": float(predictions[i])
+                "price": float(predictions[i]),
+                "mileage": float(mileage)
             })
             
         return curve
@@ -612,7 +638,7 @@ def get_live_data(make: str, model_name: str):
         return []
     with db_engine.connect() as conn:
         query = text("""
-            SELECT year, price, mileage, url, location, region 
+            SELECT year, price, mileage, url, location, region, difference, predicted_price, trim
             FROM cars 
             WHERE make ILIKE :make AND model ILIKE :model 
             AND price >= 1000 AND price <= 100000 
@@ -622,17 +648,17 @@ def get_live_data(make: str, model_name: str):
         
         data = []
         for row in result:
-            region_str = str(row[5]) if row[5] and row[5] != 'null' else ''
             location_str = str(row[4]).title()
-            if region_str and region_str.upper() != 'UNSPECIFIED':
-                location_str = f"{location_str}, {format_region(region_str)}"
-                
+            
             data.append({
                 "year": row[0],
                 "price": float(row[1]),
                 "mileage": float(row[2]) if row[2] else 0,
                 "url": row[3],
-                "location": location_str
+                "location": location_str,
+                "difference": float(row[6]) if row[6] else 0,
+                "predicted_price": float(row[7]) if row[7] else 0,
+                "trim": str(row[8]) if row[8] else 'unspecified'
             })
         return data
 
