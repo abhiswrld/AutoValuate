@@ -138,8 +138,13 @@ const Insights = ({ initialMake = '', initialModel = '' }) => {
   const [depreciationData, setDepreciationData] = useState([]);
   const [liveData, setLiveData] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [hoveredYear, setHoveredYear] = useState(null);
+  const [hoveredXValue, setHoveredXValue] = useState(null);
   const [xAxisKey, setXAxisKey] = useState('year');
+
+  // Clear hovered value when switching tabs or cars
+  useEffect(() => {
+    setHoveredXValue(null);
+  }, [xAxisKey, selectedMake, selectedModel]);
 
   // Fetch makes on mount
   useEffect(() => {
@@ -239,17 +244,22 @@ const Insights = ({ initialMake = '', initialModel = '' }) => {
     if (!liveData.length) return [];
     let map = {};
     liveData.forEach(car => {
-      const loc = car.location.split(',')[0];
-      if (!map[loc]) map[loc] = { sum: 0, count: 0 };
-      map[loc].sum += car.price;
-      map[loc].count++;
+      const loc = car.location;
+      if (!map[loc]) {
+        map[loc] = { price: car.price, url: car.url, trim: car.trim, mileage: car.mileage, year: car.year };
+      } else if (car.price < map[loc].price) {
+        map[loc] = { price: car.price, url: car.url, trim: car.trim, mileage: car.mileage, year: car.year };
+      }
     });
     const arr = Object.keys(map).map(loc => ({
       name: loc,
-      avg: Math.round(map[loc].sum / map[loc].count),
-      count: map[loc].count
+      price: map[loc].price,
+      url: map[loc].url,
+      trim: map[loc].trim,
+      mileage: map[loc].mileage,
+      year: map[loc].year
     }));
-    return arr.sort((a, b) => a.avg - b.avg).slice(0, 5);
+    return arr.sort((a, b) => a.price - b.price).slice(0, 5);
   }, [liveData]);
 
   const trimData = useMemo(() => {
@@ -267,8 +277,41 @@ const Insights = ({ initialMake = '', initialModel = '' }) => {
   const COLORS = ['#818cf8', '#34d399', '#60a5fa', '#f472b6', '#fbbf24'];
 
   const chartData = useMemo(() => {
-    return [...depreciationData].sort((a, b) => a[xAxisKey] - b[xAxisKey]);
-  }, [depreciationData, xAxisKey]);
+    let base = [...depreciationData].sort((a, b) => a[xAxisKey] - b[xAxisKey]);
+    
+    if (xAxisKey === 'mileage' && base.length > 1) {
+      let combinedMap = new Map();
+      base.forEach(p => combinedMap.set(p.mileage, p));
+      
+      liveData.forEach(car => {
+        let targetM = car.mileage;
+        if (combinedMap.has(targetM)) return;
+        
+        let lower = base[0];
+        let upper = base[base.length - 1];
+        
+        for(let i=0; i<base.length-1; i++) {
+          if (base[i].mileage <= targetM && base[i+1].mileage >= targetM) {
+            lower = base[i];
+            upper = base[i+1];
+            break;
+          }
+        }
+        
+        if (lower && upper && lower.mileage !== upper.mileage) {
+          let ratio = (targetM - lower.mileage) / (upper.mileage - lower.mileage);
+          combinedMap.set(targetM, {
+            year: lower.year + ratio * (upper.year - lower.year),
+            price: lower.price + ratio * (upper.price - lower.price),
+            mileage: targetM
+          });
+        }
+      });
+      return Array.from(combinedMap.values()).sort((a, b) => a.mileage - b.mileage);
+    }
+    
+    return base;
+  }, [depreciationData, xAxisKey, liveData]);
 
   return (
     <div className="w-full max-w-6xl mx-auto px-6 py-12 relative z-10">
@@ -349,7 +392,7 @@ const Insights = ({ initialMake = '', initialModel = '' }) => {
               margin={{ top: 20, right: 30, bottom: 50, left: 20 }}
               onMouseMove={(e) => {
                 if (e && e.activeLabel) {
-                  setHoveredYear(xAxisKey === 'year' ? e.activeLabel : null);
+                  setHoveredXValue(e.activeLabel);
                 }
               }}
             >
@@ -416,18 +459,20 @@ const Insights = ({ initialMake = '', initialModel = '' }) => {
         {selectedMake && selectedModel && !loading && (
           <div className="w-full h-auto bg-[#030308]/50 border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-2xl flex flex-col">
             <div className="flex flex-col gap-4 mb-4 border-b border-white/10 pb-4">
-              {!hoveredYear && (
+              {!hoveredXValue && (
                 <h3 className="text-xl font-bold text-white">Market Listings</h3>
               )}
               
-              {hoveredYear && (
+              {hoveredXValue && (
                 <div className="flex flex-col gap-2 w-full">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-sm font-medium">
-                      AI Predicts: ${depreciationData.find(d => d.year === hoveredYear)?.price?.toLocaleString(undefined, {maximumFractionDigits: 0}) || 'N/A'}
+                      AI Predicts: ${chartData.find(d => d[xAxisKey] === hoveredXValue)?.price?.toLocaleString(undefined, {maximumFractionDigits: 0}) || 'N/A'}
                     </span>
                     <span className="bg-white/5 text-gray-300 border border-white/10 px-3 py-1 rounded-full text-sm font-medium">
-                      Est. Mileage: {((new Date().getFullYear() - hoveredYear) * 12000).toLocaleString()} mi
+                      {xAxisKey === 'year' 
+                        ? `Est. Mileage: ${((new Date().getFullYear() - hoveredXValue) * 12000).toLocaleString()} mi` 
+                        : `Est. Year: ${Math.floor(chartData.find(d => d.mileage === hoveredXValue)?.year || (new Date().getFullYear() - Math.round(hoveredXValue / 12000)))}`}
                     </span>
                   </div>
                 </div>
@@ -435,16 +480,20 @@ const Insights = ({ initialMake = '', initialModel = '' }) => {
             </div>
             
             <div className="w-full overflow-y-auto pb-4 pt-2 px-1 custom-scrollbar">
-              {!hoveredYear ? (
+              {!hoveredXValue ? (
                 <div className="h-32 flex items-center justify-center text-gray-500 text-sm italic text-center px-4">
-                  Hover over the chart to see live listings for a specific year.
+                  Hover over the chart to see live listings.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
                   {(() => {
-                    const carsForYear = liveData.filter(c => c.year === hoveredYear).sort((a, b) => a.price - b.price);
+                    const carsForYear = liveData.filter(c => {
+                      if (xAxisKey === 'year') return c.year === hoveredXValue;
+                      return Math.abs(c.mileage - hoveredXValue) <= 8000; // within 8k miles for mileage view
+                    }).sort((a, b) => a.price - b.price);
+                    
                     if (carsForYear.length === 0) {
-                      return <p className="text-gray-500 text-sm italic h-32 flex items-center px-8 mx-auto col-span-full justify-center">No live listings found for {hoveredYear}.</p>;
+                      return <p className="text-gray-500 text-sm italic h-32 flex items-center px-8 mx-auto col-span-full justify-center">No live listings found near {xAxisKey === 'year' ? hoveredXValue : `${(hoveredXValue/1000).toFixed(0)}k miles`}.</p>;
                     }
                     return carsForYear.map((car, idx) => (
                       <a key={idx} href={car.url} target="_blank" rel="noopener noreferrer" className="w-full block bg-white/5 rounded-xl p-4 hover:bg-white/10 hover:border-indigo-500/50 transition-colors border border-white/5 cursor-pointer shadow-lg">
@@ -465,69 +514,84 @@ const Insights = ({ initialMake = '', initialModel = '' }) => {
       
       {/* Lower Dashboard Panels */}
       {selectedMake && selectedModel && !loading && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full relative z-30 mb-12">
+        <div className="flex flex-col gap-6 w-full relative z-30 mt-6 mb-12">
           
-          {/* Deal Quality Bar Chart */}
-          <div className="bg-[#030308]/50 border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-2xl flex flex-col items-center">
-            <h3 className="text-white font-bold mb-4 tracking-wide w-full text-left">Deal Quality</h3>
-            <div className="w-full h-64 flex flex-col justify-between">
-              {dealQualityData.some(d => d.count > 0) ? (
-                <>
-                  <ResponsiveContainer width="100%" height="80%">
-                    <BarChart data={dealQualityData} layout="vertical" margin={{ top: 0, right: 30, left: 30, bottom: 0 }}>
-                      <RechartsXAxis type="number" hide />
-                      <RechartsYAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 13 }} width={120} />
-                      <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#0c0d12', borderColor: '#374151', borderRadius: '12px', color: '#fff' }} />
-                      <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={28}>
-                        {dealQualityData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                  <p className="text-gray-400 text-xs italic text-center mt-4">
-                    Based on AI market value predictions.
-                  </p>
-                </>
-              ) : (
-                <p className="text-gray-500 italic text-sm w-full text-center mt-10">Not enough AI prediction data.</p>
-              )}
-            </div>
-          </div>
-
-          {/* Regional Leaderboard */}
-          <div className="bg-[#030308]/50 border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-2xl flex flex-col">
-            <h3 className="text-white font-bold mb-4 tracking-wide">Cheapest Markets</h3>
-            <div className="flex-1 flex flex-col justify-center gap-3 h-64">
+          {/* Regional Leaderboard (Full Width) */}
+          <div className="bg-[#030308]/50 border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-2xl flex flex-col w-full">
+            <h3 className="text-white font-extrabold mb-4 tracking-wider w-full text-center uppercase text-lg">Cheapest Markets</h3>
+            <div className="flex-1 flex flex-col gap-3 mt-4">
               {regionalData.length > 0 ? (
                 regionalData.map((loc, idx) => (
-                  <div key={idx} className="flex justify-between items-center px-4 py-2 bg-white/5 rounded-xl border border-white/5">
-                    <div className="flex items-center gap-3">
-                      <span className="text-indigo-400 font-black text-lg">{idx + 1}</span>
-                      <span className="text-gray-300 font-medium truncate max-w-[120px]">{loc.name}</span>
+                  <a 
+                    key={idx} 
+                    href={loc.url}
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex justify-between items-center px-6 py-4 bg-white/5 rounded-xl border border-white/5 hover:bg-white/10 hover:border-indigo-500/50 transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-4 w-1/3">
+                      <span className="text-indigo-400 font-black text-xl w-6">{idx + 1}</span>
+                      <span className="text-gray-200 font-bold text-lg truncate group-hover:text-white transition-colors">{loc.name}</span>
                     </div>
-                    <span className="text-emerald-400 font-bold">${loc.avg.toLocaleString()}</span>
-                  </div>
+                    
+                    <div className="flex gap-3 flex-1 justify-center items-center">
+                      <span className="text-gray-400 bg-white/5 px-4 py-1.5 rounded-full text-sm font-semibold">{loc.year}</span>
+                      <span className="text-gray-400 bg-white/5 px-4 py-1.5 rounded-full text-sm font-semibold truncate max-w-[150px]">{loc.trim}</span>
+                      <span className="text-gray-400 bg-white/5 px-4 py-1.5 rounded-full text-sm font-semibold">{loc.mileage.toLocaleString()} mi</span>
+                    </div>
+                    
+                    <div className="flex justify-end w-1/3">
+                      <span className="text-emerald-400 font-black text-2xl">${loc.price.toLocaleString()}</span>
+                    </div>
+                  </a>
                 ))
               ) : (
-                <p className="text-gray-500 italic text-sm w-full text-center mt-6">Not enough location data.</p>
+                <p className="text-gray-500 italic text-sm w-full text-center mt-6 h-64 flex items-center justify-center">Not enough location data.</p>
               )}
             </div>
           </div>
 
-          {/* Trim Popularity Donut */}
-          <div className="bg-[#030308]/50 border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-2xl flex flex-col items-center">
-            <h3 className="text-white font-bold mb-0 tracking-wide w-full text-left">Top Trims</h3>
-            <div className="w-full h-64">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
+            {/* Deal Quality Bar Chart */}
+            <div className="bg-[#030308]/50 border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-2xl flex flex-col items-center">
+              <h3 className="text-white font-extrabold mb-4 tracking-wider w-full text-center uppercase text-lg">Deal Quality</h3>
+              <div className="w-full h-[22rem] mt-4 flex flex-col justify-between">
+                {dealQualityData.some(d => d.count > 0) ? (
+                  <>
+                    <ResponsiveContainer width="100%" height="90%">
+                      <BarChart data={dealQualityData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                        <RechartsXAxis type="number" hide />
+                        <RechartsYAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#f3f4f6', fontSize: 15, fontWeight: 'bold', dx: -5 }} width={140} />
+                        <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={45} isAnimationActive={false}>
+                          {dealQualityData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <p className="text-gray-400 text-xs italic text-center mt-4">
+                      Based on AI market value predictions.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-gray-500 italic text-sm w-full text-center mt-10">Not enough AI prediction data.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Trim Popularity Donut */}
+            <div className="bg-[#030308]/50 border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-2xl flex flex-col items-center">
+            <h3 className="text-white font-extrabold mb-0 tracking-wider w-full text-center uppercase text-lg">Top Trims</h3>
+            <div className="w-full h-[22rem] mt-4">
               {trimData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={trimData}
                       cx="50%"
-                      cy="42%"
-                      innerRadius={65}
-                      outerRadius={85}
+                      cy="45%"
+                      innerRadius={90}
+                      outerRadius={120}
                       paddingAngle={5}
                       dataKey="value"
                       stroke="none"
@@ -540,7 +604,7 @@ const Insights = ({ initialMake = '', initialModel = '' }) => {
                       contentStyle={{ backgroundColor: '#0c0d12', borderColor: '#374151', borderRadius: '12px', color: '#fff' }}
                       itemStyle={{ color: '#fff' }}
                     />
-                    <Legend verticalAlign="bottom" height={60} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#9ca3af', paddingTop: '10px' }} />
+                    <Legend verticalAlign="bottom" height={40} iconType="circle" wrapperStyle={{ fontSize: '15px', fontWeight: 'bold', color: '#f3f4f6', paddingTop: '20px' }} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
@@ -548,7 +612,7 @@ const Insights = ({ initialMake = '', initialModel = '' }) => {
               )}
             </div>
           </div>
-
+          </div>
         </div>
       )}
 
