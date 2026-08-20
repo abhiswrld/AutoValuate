@@ -562,22 +562,43 @@ def get_depreciation_curve(make: str, model_name: str):
         avg_prices = pd.read_csv('api/avg_prices.csv')
         df_synth = pd.merge(df_synth, avg_prices, on=['year', 'make', 'model'], how='left')
         
-        make_model_prices = avg_prices[(avg_prices['make'] == make.lower()) & (avg_prices['model'] == model_name.lower())]
-        if not make_model_prices.empty:
-            max_year_row = make_model_prices.loc[make_model_prices['year'].idxmax()]
-            max_year = max_year_row['year']
-            max_price = max_year_row['avg_market_price']
+        # Fetch actual average prices from LIVE database to anchor modern years to current market realities
+        live_avg_prices = {}
+        if db_engine:
+            with db_engine.connect() as conn:
+                query = text("""
+                    SELECT year, AVG(price) 
+                    FROM cars 
+                    WHERE make ILIKE :make AND model ILIKE :model 
+                    AND price >= 1000 AND price <= 100000
+                    GROUP BY year
+                """)
+                res = conn.execute(query, {"make": make, "model": model_name}).fetchall()
+                for row in res:
+                    live_avg_prices[int(row[0])] = float(row[1])
+
+        # Update avg_market_price with LIVE data if available 
+        def update_with_live(row):
+            if row['year'] in live_avg_prices:
+                return live_avg_prices[row['year']]
+            return row['avg_market_price']
+            
+        df_synth['avg_market_price'] = df_synth.apply(update_with_live, axis=1)
+
+        # Now fill in any missing years (NaNs) with the smoothed fallback logic
+        valid_prices = df_synth.dropna(subset=['avg_market_price'])
+        if not valid_prices.empty:
+            max_year = valid_prices['year'].max()
+            max_price = valid_prices[valid_prices['year'] == max_year]['avg_market_price'].iloc[0]
             
             def fill_smooth_price(row):
-                if row['year'] >= current_year - 1:
-                    # Apply a 30% "Brand New Premium" to correctly anchor the MSRP 
-                    # because the dataset's max_price is based on depreciated used listings.
-                    return max_price * 1.30 * (1.05 ** (row['year'] - max_year))
-                elif row['year'] > max_year:
+                if pd.notna(row['avg_market_price']):
+                    return row['avg_market_price']
+                if row['year'] > max_year:
                     return max_price * (1.05 ** (row['year'] - max_year))
                 else:
-                    # 6% steady baseline decay backward
                     return max_price * (0.94 ** (max_year - row['year']))
+                    
             df_synth['avg_market_price'] = df_synth.apply(fill_smooth_price, axis=1)
         else:
             df_synth['avg_market_price'] = df_synth['avg_market_price'].fillna(25000)
@@ -587,6 +608,10 @@ def get_depreciation_curve(make: str, model_name: str):
         
     # Calculate MSRP exactly like the training pipeline
     df_synth['estimated_msrp'] = df_synth['avg_market_price'] * (1 + 0.10 * df_synth['age'])
+    
+    # Ensure monotonic decrease for the synthetic curve to prevent jagged edges
+    df_synth['avg_market_price'] = df_synth['avg_market_price'].cummax()
+    df_synth['estimated_msrp'] = df_synth['estimated_msrp'].cummax()
         
     # Predict!
     try:
@@ -649,6 +674,9 @@ def get_live_data(make: str, model_name: str):
         data = []
         for row in result:
             location_str = str(row[4]).title()
+            region_str = format_region(str(row[5])) if row[5] else ""
+            if region_str and region_str.lower() not in location_str.lower():
+                location_str = f"{location_str}, {region_str}"
             
             data.append({
                 "year": row[0],
