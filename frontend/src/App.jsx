@@ -892,7 +892,7 @@ function App() {
                           )}
                         </button>
                         {/* Tooltip */}
-                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-max px-2 py-1 bg-[#0a0a0a] border border-white/10 text-white text-[9px] font-bold uppercase tracking-[0.15em] rounded-md opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity shadow-xl">
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-[#0a0a0a] border border-white/10 text-white text-[9px] font-bold uppercase tracking-[0.15em] rounded-md opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity shadow-xl z-50">
                           REPORT SOLD
                         </div>
                       </div>
