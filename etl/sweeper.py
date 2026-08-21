@@ -49,7 +49,7 @@ def run_sweeper():
         
         query = text("""
             SELECT url FROM cars 
-            ORDER BY last_checked ASC
+            ORDER BY last_checked ASC, created_at ASC
             LIMIT 500
         """)
         cars_to_check = [row[0] for row in conn.execute(query).fetchall()]
