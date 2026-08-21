@@ -13,10 +13,17 @@ def scrape_craigslist():
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
         })
         
-        # Top 10 US Craigslist Regions
+        # Top 50 US Craigslist Regions
         regions = [
             'sfbay', 'losangeles', 'newyork', 'seattle', 'chicago', 
-            'dallas', 'miami', 'atlanta', 'boston', 'phoenix'
+            'dallas', 'miami', 'atlanta', 'boston', 'phoenix',
+            'houston', 'sandiego', 'austin', 'denver', 'lasvegas', 
+            'portland', 'philadelphia', 'sacramento', 'orlando', 'tampa', 
+            'detroit', 'minneapolis', 'charlotte', 'raleigh', 'washingtondc', 
+            'baltimore', 'nashville', 'stlouis', 'kansascity', 'saltlakecity', 
+            'sanantonio', 'cincinnati', 'cleveland', 'columbus', 'indianapolis', 
+            'milwaukee', 'pittsburgh', 'richmond', 'neworleans', 'oklahomacity', 
+            'albuquerque', 'omaha', 'honolulu', 'tucson', 'fresno', 'tulsa'
         ]
         
         all_cars_data = []
