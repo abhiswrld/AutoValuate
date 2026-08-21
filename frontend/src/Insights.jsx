@@ -362,9 +362,16 @@ const Insights = ({ initialMake = '', initialModel = '' }) => {
                   <span className="text-gray-400 text-xs uppercase tracking-widest font-bold mb-1">Live Inventory</span>
                   <span className="text-2xl font-extrabold text-white">{quickStats.inventory} <span className="text-sm font-medium text-gray-500">listings</span></span>
                 </div>
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-center items-center backdrop-blur-md hover:bg-white/10 transition">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-center items-center backdrop-blur-md hover:bg-white/10 transition group relative cursor-help">
                   <span className="text-gray-400 text-xs uppercase tracking-widest font-bold mb-1">1-Year Dep.</span>
-                  <span className="text-2xl font-extrabold text-rose-400">-${Math.round(quickStats.loss).toLocaleString()}</span>
+                  <span className="text-2xl font-extrabold text-rose-400">
+                    {Math.round(quickStats.loss) <= 0 
+                      ? `$0` 
+                      : `-$${Math.round(quickStats.loss).toLocaleString()}`}
+                  </span>
+                  <div className="absolute bottom-full mb-3 hidden group-hover:block w-56 bg-[#0c0d12] text-gray-300 text-xs rounded-xl p-3 text-center border border-white/10 shadow-2xl z-50">
+                    The AI-predicted value lost during the first year of ownership.
+                  </div>
                 </div>
               </div>
             )}
@@ -529,19 +536,20 @@ const Insights = ({ initialMake = '', initialModel = '' }) => {
                     rel="noopener noreferrer"
                     className="flex justify-between items-center px-6 py-4 bg-white/5 rounded-xl border border-white/5 hover:bg-white/10 hover:border-indigo-500/50 transition-colors cursor-pointer group"
                   >
-                    <div className="flex items-center gap-4 w-1/3">
+                    <div className="flex items-center gap-4 flex-1">
                       <span className="text-indigo-400 font-black text-xl w-6">{idx + 1}</span>
                       <span className="text-gray-200 font-bold text-lg truncate group-hover:text-white transition-colors">{loc.name}</span>
                     </div>
                     
-                    <div className="flex gap-3 flex-1 justify-center items-center">
-                      <span className="text-gray-400 bg-white/5 px-4 py-1.5 rounded-full text-sm font-semibold">{loc.year}</span>
-                      <span className="text-gray-400 bg-white/5 px-4 py-1.5 rounded-full text-sm font-semibold truncate max-w-[150px]">{loc.trim}</span>
-                      <span className="text-gray-400 bg-white/5 px-4 py-1.5 rounded-full text-sm font-semibold">{loc.mileage.toLocaleString()} mi</span>
-                    </div>
-                    
-                    <div className="flex justify-end w-1/3">
-                      <span className="text-emerald-400 font-black text-2xl">${loc.price.toLocaleString()}</span>
+                    <div className="flex justify-end items-center gap-4 shrink-0">
+                      <div className="flex gap-2 items-center hidden md:flex mr-4">
+                        {loc.trim && loc.trim.toLowerCase() !== 'unspecified' && (
+                          <span className="text-gray-400 bg-black/40 border border-white/5 px-4 py-1.5 rounded-lg text-sm font-semibold tracking-wider truncate max-w-[150px] uppercase">{loc.trim}</span>
+                        )}
+                        <span className="text-gray-400 bg-black/40 border border-white/5 px-4 py-1.5 rounded-lg text-sm font-semibold tracking-wider">{loc.year}</span>
+                        <span className="text-gray-400 bg-black/40 border border-white/5 px-4 py-1.5 rounded-lg text-sm font-semibold tracking-wider">{loc.mileage.toLocaleString()} mi</span>
+                      </div>
+                      <span className="text-emerald-400 font-black text-2xl w-24 text-right">${loc.price.toLocaleString()}</span>
                     </div>
                   </a>
                 ))
