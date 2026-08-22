@@ -193,6 +193,13 @@ function App() {
     setActiveTab('insights');
     document.getElementById('main-content')?.scrollIntoView({ behavior: 'smooth' });
   };
+  const [refreshCountdown, setRefreshCountdown] = useState(3600);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const formatCountdown = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
   const [jobId, setJobId] = useState(null)
   const [regionCounts, setRegionCounts] = useState({})
   const [selectedRegion, setSelectedRegion] = useState('sfbay')
@@ -320,15 +327,27 @@ function App() {
     fetchFeed()
     
     const fetchFreshDrops = async () => {
+      setIsRefreshing(true);
       try {
         const response = await axios.get(`${API_URL}/feed/fresh`);
         setFreshDrops(response.data);
       } catch (error) {
         console.error('Error fetching fresh drops:', error);
       }
+      setTimeout(() => setIsRefreshing(false), 1000); // 1s animation minimum
     };
 
     fetchFreshDrops();
+
+    const interval = setInterval(() => {
+      setRefreshCountdown(prev => {
+        if (prev <= 1) {
+          fetchFreshDrops();
+          return 3600;
+        }
+        return prev - 1;
+      });
+    }, 1000);
     
     // Initial fetch for the default region (sfbay)
     axios.get(`${API_URL}/cities?region=sfbay`)
@@ -834,10 +853,15 @@ function App() {
 
         {freshDrops.length > 0 && !showWatchlist && (
           <div className="w-full mb-12">
-            <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-2">
-              Hot Deals
-              <span className="text-sm font-normal text-gray-400 ml-2">Updates hourly</span>
-            </h2>
+            <div className="flex items-center gap-4 mb-6">
+              <h2 className="text-3xl font-bold tracking-tight text-white">
+                Hot Deals
+              </h2>
+              <div className={`px-4 py-1.5 rounded-full text-sm font-medium transition border flex items-center gap-2 bg-white/5 text-gray-400 border-white/10 ${isRefreshing ? 'animate-pulse text-indigo-400 border-indigo-500/50' : ''}`}>
+                <svg className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                {isRefreshing ? 'Updating...' : `Updates in ${formatCountdown(refreshCountdown)}`}
+              </div>
+            </div>
             <div className="flex gap-4 overflow-x-auto pb-6 snap-x hide-scrollbar">
               {freshDrops.map((car, i) => {
                 const diff = formatDifference(car.difference)
