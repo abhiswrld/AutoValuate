@@ -570,6 +570,9 @@ function App() {
   else if (progress >= 40) statusText = "Analyzing Listing...";
   else if (progress > 0) statusText = "Getting URL...";
 
+  const totalCarsInRegion = availableCities.reduce((sum, c) => sum + (c.count || 0), 0);
+  const dynamicCutoff = Math.max(10, Math.floor(totalCarsInRegion / 100));
+
   return (
     <div className="min-h-screen font-sans relative overflow-hidden">
 
@@ -816,7 +819,7 @@ function App() {
             </button>
             {(citySearchQuery 
               ? availableCities.filter(c => c.name.toLowerCase().includes(citySearchQuery.toLowerCase()))
-              : (showAllCities ? availableCities : availableCities.filter(c => (c.count || 0) >= 50))
+              : (showAllCities ? availableCities : availableCities.filter(c => (c.count || 0) >= dynamicCutoff))
             ).map((city) => (
               <button
                 key={city.name}
@@ -838,14 +841,14 @@ function App() {
               </button>
             ))}
             
-            {!citySearchQuery && availableCities.filter(c => (c.count || 0) < 50).length > 0 && (
+            {!citySearchQuery && availableCities.filter(c => (c.count || 0) < dynamicCutoff).length > 0 && (
               <button
                 onClick={() => setShowAllCities(!showAllCities)}
                 className="w-full px-3 py-2 rounded-xl text-[11px] font-medium transition border flex justify-center items-center gap-2 truncate bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white"
               >
                 {showAllCities 
-                  ? "Hide cities with <50 cars" 
-                  : `Show ${availableCities.filter(c => (c.count || 0) < 50).length} cities with <50 cars`}
+                  ? `Hide cities with <${dynamicCutoff} cars` 
+                  : `Show ${availableCities.filter(c => (c.count || 0) < dynamicCutoff).length} cities with <${dynamicCutoff} cars`}
               </button>
             )}
           </div>
