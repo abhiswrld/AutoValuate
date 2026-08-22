@@ -835,8 +835,8 @@ function App() {
         {freshDrops.length > 0 && !showWatchlist && (
           <div className="w-full mb-12">
             <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-2">
-              Live Deals Feed
-              <span className="text-sm font-normal text-gray-400 ml-2">Top deals based on AI prediction</span>
+              Hot Deals
+              <span className="text-sm font-normal text-gray-400 ml-2">Updates hourly</span>
             </h2>
             <div className="flex gap-4 overflow-x-auto pb-6 snap-x hide-scrollbar">
               {freshDrops.map((car, i) => {
@@ -1110,10 +1110,11 @@ function App() {
                         </div>
                       </div>
 
-                      <div className="mt-2 pt-4 border-t border-white/10 flex justify-center">
-                        <span className={`text-sm font-bold tracking-wide ${diff.colorClass}`}>
-                          {diff.text}
-                        </span>
+                      <div className={`mt-4 text-center py-2.5 rounded-xl text-sm font-bold tracking-wide transition-colors ${diff.colorClass} border ${diff.bgClass} flex items-center justify-center gap-2`}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                        </svg>
+                        {diff.text}
                       </div>
                     </div>
                   </motion.a>
