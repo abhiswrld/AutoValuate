@@ -816,7 +816,7 @@ function App() {
             </button>
             {(citySearchQuery 
               ? availableCities.filter(c => c.name.toLowerCase().includes(citySearchQuery.toLowerCase()))
-              : (showAllCities ? availableCities : availableCities.filter(c => (c.count || 0) >= 10))
+              : (showAllCities ? availableCities : availableCities.filter(c => (c.count || 0) >= 50))
             ).map((city) => (
               <button
                 key={city.name}
@@ -838,14 +838,14 @@ function App() {
               </button>
             ))}
             
-            {!citySearchQuery && availableCities.filter(c => (c.count || 0) < 10).length > 0 && (
+            {!citySearchQuery && availableCities.filter(c => (c.count || 0) < 50).length > 0 && (
               <button
                 onClick={() => setShowAllCities(!showAllCities)}
                 className="w-full px-3 py-2 rounded-xl text-[11px] font-medium transition border flex justify-center items-center gap-2 truncate bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white"
               >
                 {showAllCities 
-                  ? "Hide cities with <10 cars" 
-                  : `Show ${availableCities.filter(c => (c.count || 0) < 10).length} cities with <10 cars`}
+                  ? "Hide cities with <50 cars" 
+                  : `Show ${availableCities.filter(c => (c.count || 0) < 50).length} cities with <50 cars`}
               </button>
             )}
           </div>
@@ -975,9 +975,6 @@ function App() {
                       </div>
 
                       <div className={`text-center py-2.5 rounded-xl text-sm font-bold tracking-wide transition-colors ${diff.colorClass} border ${diff.bgClass} flex items-center justify-center gap-2`}>
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                        </svg>
                         ${Math.abs(car.difference).toLocaleString()} {car.difference < 0 ? 'over' : 'under'} AI prediction
                       </div>
                     </a>
@@ -1135,9 +1132,6 @@ function App() {
                       </div>
 
                       <div className={`mt-4 text-center py-2.5 rounded-xl text-sm font-bold tracking-wide transition-colors ${diff.colorClass} border ${diff.bgClass} flex items-center justify-center gap-2`}>
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                        </svg>
                         {diff.text}
                       </div>
                     </div>
