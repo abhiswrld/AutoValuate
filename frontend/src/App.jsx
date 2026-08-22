@@ -181,6 +181,7 @@ function App() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [feed, setFeed] = useState([])
+  const [freshDrops, setFreshDrops] = useState([])
   const [activeTab, setActiveTab] = useState('feed')
   const [insightMake, setInsightMake] = useState('')
   const [insightModel, setInsightModel] = useState('')
@@ -317,6 +318,17 @@ function App() {
 
   useEffect(() => {
     fetchFeed()
+    
+    const fetchFreshDrops = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/feed/fresh`);
+        setFreshDrops(response.data);
+      } catch (error) {
+        console.error('Error fetching fresh drops:', error);
+      }
+    };
+
+    fetchFreshDrops();
     
     // Initial fetch for the default region (sfbay)
     axios.get(`${API_URL}/cities?region=sfbay`)
@@ -529,6 +541,7 @@ function App() {
         ? `$${absDiff} under AI prediction` 
         : `$${absDiff} over AI prediction`,
       colorClass: isGoodDeal ? 'text-emerald-300/90' : 'text-rose-300/90',
+      bgClass: isGoodDeal ? 'border-emerald-500/20 bg-emerald-500/10' : 'border-rose-500/20 bg-rose-500/10'
     }
   }
 
@@ -819,6 +832,138 @@ function App() {
           </div>
         )}
 
+        {freshDrops.length > 0 && !showWatchlist && (
+          <div className="w-full mb-12">
+            <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-2">
+              Live Deals Feed
+              <span className="text-sm font-normal text-gray-400 ml-2">Top deals based on AI prediction</span>
+            </h2>
+            <div className="flex gap-4 overflow-x-auto pb-6 snap-x hide-scrollbar">
+              {freshDrops.map((car, i) => {
+                const diff = formatDifference(car.difference)
+                return (
+                  <div 
+                    key={`fresh-${i}`}
+                    className="min-w-[280px] md:min-w-[320px] max-w-[320px] snap-start relative group p-4 rounded-3xl overflow-hidden flex flex-col justify-end min-h-[360px] shadow-2xl border border-white/5 bg-[#0a0a0a] transition-all duration-500 hover:scale-[1.02] hover:-translate-y-1 cursor-pointer"
+                  >
+                    {/* Location + Mileage stacked top-left */}
+                    <div className="absolute top-5 left-5 z-20 flex flex-col gap-2">
+                      <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 font-medium shadow-xl">
+                        <PinIcon className="w-3 h-3" />
+                        {selectedRegion === 'all' && car.region && regionAbbreviations[car.region] ? `${car.location}, ${regionAbbreviations[car.region]}` : car.location}
+                      </span>
+                      <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 font-medium w-fit shadow-xl">
+                        {car.mileage.toLocaleString()} mi
+                      </span>
+                    </div>
+
+                    {/* Top Right Controls */}
+                    <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-2">
+                      <div className="relative z-30 flex items-center gap-2">
+                        {user && (
+                          <div className="relative flex justify-center group/tooltip opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
+                            <button 
+                              onClick={(e) => handleReportSold(e, car.url)}
+                              disabled={reportingUrls[car.url]}
+                              className="p-1.5 rounded-full bg-red-500/10 hover:bg-red-500/30 backdrop-blur-md border border-red-500/30 text-red-400 shadow-lg transition-all disabled:opacity-50"
+                            >
+                              {reportingUrls[car.url] ? (
+                                <svg className="animate-spin h-4 w-4 text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                              ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"></path></svg>
+                              )}
+                            </button>
+                            {/* Tooltip */}
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-max px-2 py-1 bg-[#0a0a0a] border border-white/10 text-white text-[9px] font-bold uppercase tracking-[0.15em] rounded-md opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity shadow-xl z-50">
+                              REPORT SOLD
+                            </div>
+                          </div>
+                        )}
+                        <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
+                          <span className="bg-indigo-600 text-white px-3 py-1.5 rounded-full font-bold text-xs tracking-wide flex items-center gap-1.5 shadow-lg">
+                            View
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                          </span>
+                        </div>
+                        <button 
+                          onClick={(e) => {
+                            e.preventDefault()
+                            toggleSaveCar(car.url)
+                          }}
+                          className={`p-1.5 rounded-full border backdrop-blur-md transition ${
+                            watchlist.includes(car.url) 
+                              ? 'bg-indigo-600 border-indigo-500 text-white' 
+                              : 'bg-black/50 border-white/10 text-gray-300 hover:bg-white/10 hover:scale-110'
+                          }`}
+                        >
+                          <svg className="w-4 h-4" fill={watchlist.includes(car.url) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                        </button>
+                      </div>
+                      
+                      <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0 w-full">
+                        <button 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            navigateToInsights(car.make, car.model);
+                          }}
+                          className="w-full bg-[#0a0a0f]/95 hover:bg-indigo-600 border border-white/10 hover:border-indigo-400 text-indigo-300 hover:text-white px-3 py-1.5 rounded-full font-bold text-xs tracking-wide flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(0,0,0,0.8)] backdrop-blur-xl transition"
+                        >
+                          Show Insights
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-0">
+                      {car.image_url ? (
+                        <img 
+                          src={car.image_url} 
+                          alt={car.name} 
+                          className="w-full h-full object-cover opacity-60 mix-blend-screen group-hover:scale-105 group-hover:opacity-80 transition-all duration-700 ease-out"
+                        />
+                      ) : (
+                        <div className="absolute -top-12 -right-16 opacity-[0.08] blur-[2px] mix-blend-screen group-hover:scale-110 group-hover:opacity-[0.15] group-hover:-translate-x-2 transition-all duration-700 ease-out">
+                          <CarIcon className="w-80 h-80 scale-x-[-1]" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/80 to-transparent pointer-events-none z-10" />
+
+                    <a 
+                      href={car.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="relative z-20 flex flex-col h-full justify-end group/link mt-20"
+                    >
+                      <h4 className="text-xl font-bold mb-4 text-white tracking-tight line-clamp-2">{car.name}</h4>
+                      
+                      <div className="flex justify-between items-end pb-3 border-b border-white/10 mb-4">
+                        <div>
+                          <p className="text-[10px] font-bold tracking-widest text-gray-500 uppercase mb-1">Listed Price</p>
+                          <div className="text-3xl font-black text-white tracking-tighter">${car.list_price.toLocaleString()}</div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold tracking-widest text-indigo-400 uppercase mb-1">AI Prediction</p>
+                          <div className="text-3xl font-black text-indigo-300 tracking-tighter">${car.ai_price.toLocaleString()}</div>
+                        </div>
+                      </div>
+
+                      <div className={`text-center py-2.5 rounded-xl text-sm font-bold tracking-wide transition-colors ${diff.colorClass} border ${diff.bgClass} flex items-center justify-center gap-2`}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                        </svg>
+                        ${Math.abs(car.difference).toLocaleString()} {car.difference < 0 ? 'over' : 'under'} AI prediction
+                      </div>
+                    </a>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Title and Refresh Row */}
         <div className="flex justify-between items-center mb-8 gap-4">
           <div className="flex items-center gap-4">
@@ -877,7 +1022,7 @@ function App() {
 
                     {/* Top Right Controls */}
                     <div className="absolute top-5 right-5 z-20 flex flex-col items-end gap-2">
-                      <div className="flex items-center gap-2">
+                      <div className="relative z-30 flex items-center gap-2">
                       {user && (
                       <div className="relative flex justify-center group/tooltip opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
                         <button 
@@ -892,7 +1037,7 @@ function App() {
                           )}
                         </button>
                         {/* Tooltip */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-[#0a0a0a] border border-white/10 text-white text-[9px] font-bold uppercase tracking-[0.15em] rounded-md opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity shadow-xl z-50">
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-[0px] w-max px-2 py-1 bg-[#0a0a0a] border border-white/10 text-white text-[9px] font-bold uppercase tracking-[0.15em] rounded-md opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity shadow-xl z-50">
                           REPORT SOLD
                         </div>
                       </div>
