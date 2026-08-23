@@ -286,7 +286,7 @@ def enrich_database():
 
     # Grab cars where the new deep-scrape features are missing
     with engine.connect() as connection:
-        query = text("SELECT url FROM cars WHERE cylinders IS NULL ORDER BY created_at DESC LIMIT 1000")
+        query = text("SELECT url FROM cars WHERE cylinders IS NULL ORDER BY year DESC NULLS LAST, created_at DESC LIMIT 1000")
         result = connection.execute(query)
         cars_to_update = result.fetchall()
 
