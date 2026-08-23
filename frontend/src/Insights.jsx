@@ -122,7 +122,7 @@ const CustomDropdown = ({ value, options, onChange, placeholder, disabled, forma
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-const Insights = ({ initialMake = '', initialModel = '' }) => {
+const Insights = ({ initialMake = '', initialModel = '', selectedRegion = 'sfbay', renderCarCard, user, setShowAuthModal }) => {
   const [makes, setMakes] = useState([]);
   const [models, setModels] = useState([]);
   const [selectedMake, setSelectedMake] = useState(initialMake);
@@ -168,6 +168,7 @@ const Insights = ({ initialMake = '', initialModel = '' }) => {
   useEffect(() => {
     if (selectedMake && selectedModel) {
       setTimeout(() => setLoading(true), 0);
+      
       Promise.all([
         axios.get(`${API_URL}/insights/depreciation?make=${selectedMake}&model_name=${selectedModel}`),
         axios.get(`${API_URL}/insights/live_data?make=${selectedMake}&model_name=${selectedModel}`)
@@ -623,6 +624,8 @@ const Insights = ({ initialMake = '', initialModel = '' }) => {
           </div>
         </div>
       )}
+
+
 
     </div>
   );

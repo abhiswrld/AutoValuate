@@ -195,6 +195,7 @@ function App() {
   };
   const [refreshCountdown, setRefreshCountdown] = useState(3600);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hotDealsPage, setHotDealsPage] = useState(0);
   const formatCountdown = (seconds) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -202,23 +203,12 @@ function App() {
   };
   const [jobId, setJobId] = useState(null)
   const [regionCounts, setRegionCounts] = useState({})
+  const [allRegions, setAllRegions] = useState([])
   const [selectedRegion, setSelectedRegion] = useState('sfbay')
   const [selectedCity, setSelectedCity] = useState('all')
-
-  const regionAbbreviations = {
-    'sfbay': 'SF',
-    'losangeles': 'LA',
-    'newyork': 'NY',
-    'seattle': 'SE',
-    'chicago': 'CH',
-    'dallas': 'DA',
-    'miami': 'MI',
-    'atlanta': 'AT',
-    'boston': 'BO',
-    'phoenix': 'PH'
-  }
   const [availableCities, setAvailableCities] = useState([])
   const [showAllCities, setShowAllCities] = useState(false)
+  const [showAllRegions, setShowAllRegions] = useState(false)
   const [citySearchQuery, setCitySearchQuery] = useState('')
   const [sortBy, setSortBy] = useState('latest')
   const [offset, setOffset] = useState(0)
@@ -231,9 +221,13 @@ function App() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [user, setUser] = useState(null)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [watchlist, setWatchlist] = useState([])
   const [showWatchlist, setShowWatchlist] = useState(false)
   const [watchlistCars, setWatchlistCars] = useState([])
+  const [arbitrageDeals, setArbitrageDeals] = useState([])
+  const [loadingArbitrage, setLoadingArbitrage] = useState(false)
 
   const [reportingUrls, setReportingUrls] = useState({});
   const [toastMessage, setToastMessage] = useState(null);
@@ -362,7 +356,10 @@ function App() {
       .catch(err => console.error("Failed to load initial cities:", err));
 
     axios.get(`${API_URL}/regions`)
-      .then(res => setRegionCounts(res.data))
+      .then(res => {
+        setRegionCounts(res.data.counts || {})
+        setAllRegions(res.data.regions || [])
+      })
       .catch(err => console.error("Failed to load region counts:", err))
 
     const checkUser = async () => {
@@ -394,6 +391,7 @@ function App() {
 
     return () => {
       authListener.subscription.unsubscribe()
+      clearInterval(interval)
     }
   }, [])
 
@@ -448,10 +446,27 @@ function App() {
     await supabase.auth.signOut()
   }
 
+  const handleUpdateHomeRegion = async (region) => {
+    if (!user) return;
+    const { data, error } = await supabase.auth.updateUser({
+      data: { home_region: region }
+    })
+    if (error) {
+      alert("Failed to update home region: " + error.message)
+    } else {
+      setUser(data.user)
+    }
+  }
+
   const handleShowWatchlist = async () => {
     if (showWatchlist) {
       setShowWatchlist(false)
       fetchFeed()
+      return
+    }
+
+    if (!user) {
+      setShowWatchlist(true)
       return
     }
 
@@ -462,8 +477,43 @@ function App() {
 
     try {
       const response = await axios.post(`${API_URL}/watchlist`, watchlist)
-      setWatchlistCars(response.data)
+      const cars = response.data
+      setWatchlistCars(cars)
       setShowWatchlist(true)
+      
+      // Fetch Arbitrage for unique make/model combinations in watchlist
+      setLoadingArbitrage(true);
+      const uniqueModels = [];
+      const seen = new Set();
+      
+      for (const car of cars) {
+        if (!car.make || !car.model) continue;
+        const key = `${car.make.toLowerCase()}-${car.model.toLowerCase()}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueModels.push({ make: car.make, model: car.model });
+        }
+      }
+      
+      const origin = user?.user_metadata?.home_region || selectedRegion;
+      const arbPromises = uniqueModels.map(m => 
+        axios.get(`${API_URL}/feed/arbitrage?origin_region=${origin}&make=${m.make}&model=${m.model}`)
+      );
+      
+      Promise.all(arbPromises).then(responses => {
+        let allDeals = [];
+        responses.forEach(res => {
+          allDeals = [...allDeals, ...res.data];
+        });
+        // Sort all aggregated deals by net savings
+        allDeals.sort((a, b) => b.net_savings - a.net_savings);
+        setArbitrageDeals(allDeals);
+      }).catch(err => {
+        console.error("Failed to fetch arbitrage deals for watchlist", err);
+      }).finally(() => {
+        setLoadingArbitrage(false);
+      });
+      
     } catch (err) {
       console.error("Failed to load watchlist:", err)
     }
@@ -570,6 +620,125 @@ function App() {
   else if (progress >= 40) statusText = "Analyzing Listing...";
   else if (progress > 0) statusText = "Getting URL...";
 
+  const renderCarCard = (car, i) => {
+    const diff = formatDifference(car.difference)
+    return (
+      <motion.a
+        key={car.url || i}
+        href={car.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: i * 0.05 }}
+        whileHover={{ scale: 1.02 }}
+        className="relative h-96 rounded-2xl overflow-hidden border border-white/10 group cursor-pointer bg-gradient-to-br from-[#0f111a] to-[#0a0a0f] block shadow-lg"
+      >
+        {/* Location + Mileage stacked top-left */}
+        <div className="absolute top-5 left-5 z-20 flex flex-col gap-2">
+          <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium">
+            <PinIcon className="w-3 h-3" />
+            {car.location}
+          </span>
+          <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium w-fit">
+            {car.mileage.toLocaleString()} mi
+          </span>
+        </div>
+
+        {/* Top Right Controls */}
+        <div className="absolute top-5 right-5 z-20 flex flex-col items-end gap-2">
+          <div className="relative z-30 flex items-center gap-2">
+            {user && (
+              <div className="relative flex justify-center group/tooltip opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
+                <button 
+                  onClick={(e) => handleReportSold(e, car.url)}
+                  disabled={reportingUrls[car.url]}
+                  className="p-1.5 rounded-full bg-red-500/10 hover:bg-red-500/30 backdrop-blur-md border border-red-500/30 text-red-400 shadow-lg transition-all disabled:opacity-50"
+                >
+                  {reportingUrls[car.url] ? (
+                    <svg className="animate-spin h-4 w-4 text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"></path></svg>
+                  )}
+                </button>
+                {/* Tooltip */}
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-[0px] w-max px-2 py-1 bg-[#0a0a0a] border border-white/10 text-white text-[9px] font-bold uppercase tracking-[0.15em] rounded-md opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity shadow-xl z-50">
+                  REPORT SOLD
+                </div>
+              </div>
+            )}
+            <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
+              <span className="bg-indigo-600 text-white px-3 py-1.5 rounded-full font-bold text-xs tracking-wide flex items-center gap-1.5 shadow-lg">
+                View
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+              </span>
+            </div>
+            <button 
+              onClick={(e) => {
+                e.preventDefault()
+                toggleSaveCar(car.url)
+              }}
+              className={`p-1.5 rounded-full border backdrop-blur-md transition ${
+                watchlist.includes(car.url) 
+                  ? 'bg-indigo-600 border-indigo-500 text-white' 
+                  : 'bg-black/50 border-white/10 text-gray-300 hover:bg-white/10 hover:scale-110'
+              }`}
+            >
+              <svg className="w-4 h-4" fill={watchlist.includes(car.url) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+            </button>
+          </div>
+          
+          <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0 w-full">
+            <button 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                navigateToInsights(car.make, car.model);
+              }}
+              className="w-full bg-[#0a0a0f]/95 hover:bg-indigo-600 border border-white/10 hover:border-indigo-400 text-indigo-300 hover:text-white px-3 py-1.5 rounded-full font-bold text-xs tracking-wide flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(0,0,0,0.8)] backdrop-blur-xl transition"
+            >
+              Show Insights
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-0">
+          {car.image_url ? (
+            <img 
+              src={car.image_url} 
+              alt={car.name} 
+              className="w-full h-full object-cover opacity-60 mix-blend-screen group-hover:scale-105 group-hover:opacity-80 transition-all duration-700 ease-out"
+            />
+          ) : (
+            <div className="absolute -top-12 -right-16 opacity-[0.08] blur-[2px] mix-blend-screen group-hover:scale-110 group-hover:opacity-[0.15] group-hover:-translate-x-2 transition-all duration-700 ease-out">
+              <CarIcon className="w-80 h-80 scale-x-[-1]" />
+            </div>
+          )}
+        </div>
+
+        <div className="absolute inset-0 p-6 flex flex-col justify-end bg-gradient-to-t from-black via-black/60 to-transparent transition-all z-10">
+          <h4 className="text-2xl font-bold mb-6 text-white tracking-tight">{car.name}</h4>
+
+          <div className="flex justify-between items-end mb-4">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-gray-500 mb-1 font-semibold">Listed Price</p>
+              <p className="text-3xl font-extrabold text-white">${car.list_price.toLocaleString()}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-widest text-indigo-400/80 mb-1 font-semibold">AI Prediction</p>
+              <p className="text-3xl font-extrabold text-indigo-300">${car.ai_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+            </div>
+          </div>
+
+          <div className={`mt-4 text-center py-2.5 rounded-xl text-sm font-bold tracking-wide transition-colors ${diff.colorClass} border ${diff.bgClass} flex items-center justify-center gap-2`}>
+            {diff.text}
+          </div>
+        </div>
+      </motion.a>
+    )
+  }
+
   const totalCarsInRegion = availableCities.reduce((sum, c) => sum + (c.count || 0), 0);
   const dynamicCutoff = Math.max(10, Math.floor(totalCarsInRegion / 100));
 
@@ -602,9 +771,36 @@ function App() {
           <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('insights'); document.getElementById('main-content')?.scrollIntoView({ behavior: 'smooth' }); }} className={`transition ${activeTab === 'insights' ? 'text-white' : 'hover:text-white'}`}>Insights</a>
           <a href={`${API_URL}/docs`} target="_blank" rel="noreferrer" className="hover:text-white transition">API</a>
           {user ? (
-            <button onClick={handleLogout} className="px-4 py-1.5 bg-white/5 border border-white/10 text-white hover:bg-white/10 transition rounded-lg text-base">
-              Logout
-            </button>
+            <div className="relative">
+              <button 
+                onClick={() => setShowProfileMenu(!showProfileMenu)} 
+                className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-lg hover:bg-indigo-500 transition shadow-lg ring-2 ring-indigo-500/50"
+              >
+                {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
+              </button>
+              
+              {showProfileMenu && (
+                <div className="absolute right-0 mt-3 w-48 bg-[#111] border border-white/10 rounded-xl shadow-2xl py-2 z-50">
+                  <div className="px-4 py-2 border-b border-white/5 mb-2">
+                    <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                  </div>
+                  <button 
+                    onClick={() => { setShowProfileMenu(false); setShowSettingsModal(true); }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    Settings
+                  </button>
+                  <button 
+                    onClick={() => { setShowProfileMenu(false); handleLogout(); }}
+                    className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-white/5 hover:text-red-300 transition flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
           ) : (
             <button onClick={() => { setAuthMode('signin'); setShowAuthModal(true) }} className="px-4 py-1.5 bg-white/5 border border-white/10 text-white hover:bg-white/10 transition rounded-lg text-base">
               Login
@@ -752,39 +948,44 @@ function App() {
       <div id="main-content">
       {activeTab === 'feed' ? (
       <section id="feed" className="max-w-6xl mx-auto px-6 py-12 border-t border-white/5 relative z-10">
-        {/* Row 1: Main Regions */}
-        <div className="flex items-center w-full gap-2 overflow-x-auto mb-4 whitespace-nowrap scrollbar-hide">
-          {[
-            { key: 'sfbay', label: 'Bay Area' },
-            { key: 'losangeles', label: 'LA' },
-            { key: 'newyork', label: 'NY' },
-            { key: 'seattle', label: 'Seattle' },
-            { key: 'chicago', label: 'Chicago' },
-            { key: 'dallas', label: 'Dallas' },
-            { key: 'miami', label: 'Miami' },
-            { key: 'atlanta', label: 'Atlanta' },
-            { key: 'boston', label: 'Boston' },
-            { key: 'phoenix', label: 'Phoenix' }
-          ].map((region) => (
-            <button
-              key={region.key}
-              onClick={() => handleRegionClick(region.key)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition border flex items-center gap-1.5 shrink-0 ${
-                selectedRegion === region.key 
-                  ? 'bg-indigo-600 text-white border-indigo-500' 
-                  : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              {region.label}
-              <span className={`text-[10px] ${selectedRegion === region.key ? 'text-indigo-200' : 'text-gray-500'}`}>
-                {region.key === 'all' 
-                  ? (regionCounts.total || 0) 
-                  : (regionCounts[region.key] || 0)
-                }
-              </span>
-            </button>
-          ))}
-        </div>
+        {/* Region Grid — dynamic from API, sorted by most cars, 5 per row */}
+        {(() => {
+          const REGION_CUTOFF = 1000;
+          const bigRegions = allRegions.filter(r => r.count >= REGION_CUTOFF);
+          const smallRegions = allRegions.filter(r => r.count < REGION_CUTOFF);
+          const regionsToShow = showAllRegions ? allRegions : bigRegions;
+          
+          return (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-4 w-full">
+              {regionsToShow.map((region) => (
+                <button
+                  key={region.key}
+                  onClick={() => handleRegionClick(region.key)}
+                  className={`px-3 py-2 rounded-xl text-[11px] font-medium transition border flex justify-between items-center gap-1 truncate ${
+                    selectedRegion === region.key 
+                      ? 'bg-indigo-600 text-white border-indigo-500' 
+                      : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <span className="truncate">{region.label}</span>
+                  <span className={`shrink-0 font-bold ${selectedRegion === region.key ? 'text-white' : 'text-white/80'}`}>
+                    {region.count?.toLocaleString()}
+                  </span>
+                </button>
+              ))}
+              {smallRegions.length > 0 && (
+                <button
+                  onClick={() => setShowAllRegions(!showAllRegions)}
+                  className="px-3 py-2 rounded-xl text-[11px] font-medium transition border flex justify-center items-center gap-1 bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white"
+                >
+                  {showAllRegions 
+                    ? `Hide smaller regions` 
+                    : `+${smallRegions.length} more regions`}
+                </button>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Row 2: Dynamic Sub-Cities */}
         {selectedRegion !== 'all' && availableCities.length > 0 && (
@@ -865,125 +1066,28 @@ function App() {
                 {isRefreshing ? 'Updating...' : `Updates in ${formatCountdown(refreshCountdown)}`}
               </div>
             </div>
-            <div className="flex gap-4 overflow-x-auto pb-6 snap-x hide-scrollbar">
-              {freshDrops.map((car, i) => {
-                const diff = formatDifference(car.difference)
-                return (
-                  <div 
-                    key={`fresh-${i}`}
-                    className="min-w-[280px] md:min-w-[320px] max-w-[320px] snap-start relative group p-4 rounded-3xl overflow-hidden flex flex-col justify-end min-h-[360px] shadow-2xl border border-white/5 bg-[#0a0a0a] transition-all duration-500 hover:scale-[1.02] hover:-translate-y-1 cursor-pointer"
-                  >
-                    {/* Location + Mileage stacked top-left */}
-                    <div className="absolute top-5 left-5 z-20 flex flex-col gap-2">
-                      <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 font-medium shadow-xl">
-                        <PinIcon className="w-3 h-3" />
-                        {selectedRegion === 'all' && car.region && regionAbbreviations[car.region] ? `${car.location}, ${regionAbbreviations[car.region]}` : car.location}
-                      </span>
-                      <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 font-medium w-fit shadow-xl">
-                        {car.mileage.toLocaleString()} mi
-                      </span>
-                    </div>
+            <div className="relative flex items-center w-full group/slider">
+              <button 
+                onClick={() => setHotDealsPage(p => Math.max(0, p - 1))}
+                disabled={hotDealsPage === 0}
+                className="absolute left-0 -ml-5 z-30 p-2.5 bg-[#0a0a0f] border border-white/10 rounded-full text-white shadow-2xl hover:bg-indigo-600 disabled:opacity-0 transition-all opacity-0 group-hover/slider:opacity-100"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
+              </button>
 
-                    {/* Top Right Controls */}
-                    <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-2">
-                      <div className="relative z-30 flex items-center gap-2">
-                        {user && (
-                          <div className="relative flex justify-center group/tooltip opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
-                            <button 
-                              onClick={(e) => handleReportSold(e, car.url)}
-                              disabled={reportingUrls[car.url]}
-                              className="p-1.5 rounded-full bg-red-500/10 hover:bg-red-500/30 backdrop-blur-md border border-red-500/30 text-red-400 shadow-lg transition-all disabled:opacity-50"
-                            >
-                              {reportingUrls[car.url] ? (
-                                <svg className="animate-spin h-4 w-4 text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                              ) : (
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"></path></svg>
-                              )}
-                            </button>
-                            {/* Tooltip */}
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-max px-2 py-1 bg-[#0a0a0a] border border-white/10 text-white text-[9px] font-bold uppercase tracking-[0.15em] rounded-md opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity shadow-xl z-50">
-                              REPORT SOLD
-                            </div>
-                          </div>
-                        )}
-                        <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
-                          <span className="bg-indigo-600 text-white px-3 py-1.5 rounded-full font-bold text-xs tracking-wide flex items-center gap-1.5 shadow-lg">
-                            View
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                          </span>
-                        </div>
-                        <button 
-                          onClick={(e) => {
-                            e.preventDefault()
-                            toggleSaveCar(car.url)
-                          }}
-                          className={`p-1.5 rounded-full border backdrop-blur-md transition ${
-                            watchlist.includes(car.url) 
-                              ? 'bg-indigo-600 border-indigo-500 text-white' 
-                              : 'bg-black/50 border-white/10 text-gray-300 hover:bg-white/10 hover:scale-110'
-                          }`}
-                        >
-                          <svg className="w-4 h-4" fill={watchlist.includes(car.url) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
-                        </button>
-                      </div>
-                      
-                      <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0 w-full">
-                        <button 
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            navigateToInsights(car.make, car.model);
-                          }}
-                          className="w-full bg-[#0a0a0f]/95 hover:bg-indigo-600 border border-white/10 hover:border-indigo-400 text-indigo-300 hover:text-white px-3 py-1.5 rounded-full font-bold text-xs tracking-wide flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(0,0,0,0.8)] backdrop-blur-xl transition"
-                        >
-                          Show Insights
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
-                        </button>
-                      </div>
-                    </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+                {freshDrops.slice(0, 9).slice(hotDealsPage * 3, hotDealsPage * 3 + 3).map((car, i) => {
+                  return renderCarCard(car, i)
+                })}
+              </div>
 
-                    <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-0">
-                      {car.image_url ? (
-                        <img 
-                          src={car.image_url} 
-                          alt={car.name} 
-                          className="w-full h-full object-cover opacity-60 mix-blend-screen group-hover:scale-105 group-hover:opacity-80 transition-all duration-700 ease-out"
-                        />
-                      ) : (
-                        <div className="absolute -top-12 -right-16 opacity-[0.08] blur-[2px] mix-blend-screen group-hover:scale-110 group-hover:opacity-[0.15] group-hover:-translate-x-2 transition-all duration-700 ease-out">
-                          <CarIcon className="w-80 h-80 scale-x-[-1]" />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/80 to-transparent pointer-events-none z-10" />
-
-                    <a 
-                      href={car.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="relative z-20 flex flex-col h-full justify-end group/link mt-20"
-                    >
-                      <h4 className="text-xl font-bold mb-4 text-white tracking-tight line-clamp-2">{car.name}</h4>
-                      
-                      <div className="flex justify-between items-end pb-3 border-b border-white/10 mb-4">
-                        <div>
-                          <p className="text-[10px] font-bold tracking-widest text-gray-500 uppercase mb-1">Listed Price</p>
-                          <div className="text-3xl font-black text-white tracking-tighter">${car.list_price.toLocaleString()}</div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[10px] font-bold tracking-widest text-indigo-400 uppercase mb-1">AI Prediction</p>
-                          <div className="text-3xl font-black text-indigo-300 tracking-tighter">${car.ai_price.toLocaleString()}</div>
-                        </div>
-                      </div>
-
-                      <div className={`text-center py-2.5 rounded-xl text-sm font-bold tracking-wide transition-colors ${diff.colorClass} border ${diff.bgClass} flex items-center justify-center gap-2`}>
-                        ${Math.abs(car.difference).toLocaleString()} {car.difference < 0 ? 'over' : 'under'} AI prediction
-                      </div>
-                    </a>
-                  </div>
-                )
-              })}
+              <button 
+                onClick={() => setHotDealsPage(p => Math.min(2, p + 1))}
+                disabled={hotDealsPage >= 2 || hotDealsPage >= Math.ceil(Math.min(9, freshDrops.length) / 3) - 1}
+                className="absolute right-0 -mr-5 z-30 p-2.5 bg-[#0a0a0f] border border-white/10 rounded-full text-white shadow-2xl hover:bg-indigo-600 disabled:opacity-0 transition-all opacity-0 group-hover/slider:opacity-100"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
+              </button>
             </div>
           </div>
         )}
@@ -994,19 +1098,17 @@ function App() {
             <h3 className="text-3xl font-bold tracking-tight text-white">
               {showWatchlist ? "My Saved Cars" : "Market Feed"}
             </h3>
-            {user && (
-              <button 
-                onClick={handleShowWatchlist}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition border flex items-center gap-2 ${
-                  showWatchlist 
-                    ? 'bg-indigo-600 text-white border-indigo-500' 
-                    : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                <svg className="w-4 h-4" fill={showWatchlist ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
-                Saved ({watchlist.length})
-              </button>
-            )}
+            <button 
+              onClick={handleShowWatchlist}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition border flex items-center gap-2 ${
+                showWatchlist 
+                  ? 'bg-indigo-600 text-white border-indigo-500' 
+                  : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              <svg className="w-4 h-4" fill={showWatchlist ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+              Saved ({watchlist.length})
+            </button>
           </div>
           
           {!showWatchlist && (
@@ -1016,131 +1118,26 @@ function App() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {(() => {
+            if (showWatchlist && !user) {
+              return (
+                <div className="col-span-3 flex flex-col items-center justify-center py-16 px-4 text-center border border-indigo-500/30 bg-indigo-500/10 rounded-3xl backdrop-blur-xl">
+                  <svg className="w-12 h-12 text-gray-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  <h3 className="text-2xl font-bold text-white mb-2">Members Only Feature</h3>
+                  <p className="text-gray-400 max-w-lg mx-auto mb-6">Create a free account to save your favorite cars and instantly unlock the best cross-country arbitrage deals based on your watchlist.</p>
+                  <button 
+                    onClick={() => { setAuthMode('signup'); setShowAuthModal(true); }}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/25"
+                  >
+                    Sign In / Sign Up
+                  </button>
+                </div>
+              )
+            }
+
             const carsToShow = showWatchlist ? watchlistCars : feed;
             
             if (carsToShow && carsToShow.length > 0) {
-              return carsToShow.map((car, i) => {
-                const diff = formatDifference(car.difference)
-                return (
-                  <motion.a
-                    key={i}
-                    href={car.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, delay: i * 0.05 }}
-                    whileHover={{ scale: 1.02 }}
-                    className="relative h-96 rounded-2xl overflow-hidden border border-white/10 group cursor-pointer bg-gradient-to-br from-[#0f111a] to-[#0a0a0f] block shadow-lg"
-                  >
-                    {/* Location + Mileage stacked top-left */}
-                    <div className="absolute top-5 left-5 z-20 flex flex-col gap-2">
-                      <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium">
-                        <PinIcon className="w-3 h-3" />
-                        {selectedRegion === 'all' && car.region && regionAbbreviations[car.region] ? `${car.location}, ${regionAbbreviations[car.region]}` : car.location}
-                      </span>
-                      <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium w-fit">
-                        {car.mileage.toLocaleString()} mi
-                      </span>
-                    </div>
-
-                    {/* Top Right Controls */}
-                    <div className="absolute top-5 right-5 z-20 flex flex-col items-end gap-2">
-                      <div className="relative z-30 flex items-center gap-2">
-                      {user && (
-                      <div className="relative flex justify-center group/tooltip opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
-                        <button 
-                          onClick={(e) => handleReportSold(e, car.url)}
-                          disabled={reportingUrls[car.url]}
-                          className="p-1.5 rounded-full bg-red-500/10 hover:bg-red-500/30 backdrop-blur-md border border-red-500/30 text-red-400 shadow-lg transition-all disabled:opacity-50"
-                        >
-                          {reportingUrls[car.url] ? (
-                            <svg className="animate-spin h-4 w-4 text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                          ) : (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"></path></svg>
-                          )}
-                        </button>
-                        {/* Tooltip */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-[0px] w-max px-2 py-1 bg-[#0a0a0a] border border-white/10 text-white text-[9px] font-bold uppercase tracking-[0.15em] rounded-md opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity shadow-xl z-50">
-                          REPORT SOLD
-                        </div>
-                      </div>
-                      )}
-                      <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
-                        <span className="bg-indigo-600 text-white px-3 py-1.5 rounded-full font-bold text-xs tracking-wide flex items-center gap-1.5 shadow-lg">
-                          View
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                        </span>
-                      </div>
-                      <button 
-                        onClick={(e) => {
-                          e.preventDefault()
-                          toggleSaveCar(car.url)
-                        }}
-                        className={`p-1.5 rounded-full border backdrop-blur-md transition ${
-                          watchlist.includes(car.url) 
-                            ? 'bg-indigo-600 border-indigo-500 text-white' 
-                            : 'bg-black/50 border-white/10 text-gray-300 hover:bg-white/10 hover:scale-110'
-                        }`}
-                      >
-                        <svg className="w-4 h-4" fill={watchlist.includes(car.url) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
-                      </button>
-                      </div>
-                      
-                      <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0 w-full">
-                        <button 
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            navigateToInsights(car.make, car.model);
-                          }}
-                          className="w-full bg-[#0a0a0f]/95 hover:bg-indigo-600 border border-white/10 hover:border-indigo-400 text-indigo-300 hover:text-white px-3 py-1.5 rounded-full font-bold text-xs tracking-wide flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(0,0,0,0.8)] backdrop-blur-xl transition"
-                        >
-                          Show Insights
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
-                        </button>
-                      </div>
-                    </div>
-
-
-
-                    <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-0">
-                      {car.image_url ? (
-                        <img 
-                          src={car.image_url} 
-                          alt={car.name} 
-                          className="w-full h-full object-cover opacity-60 mix-blend-screen group-hover:scale-105 group-hover:opacity-80 transition-all duration-700 ease-out"
-                        />
-                      ) : (
-                        <div className="absolute -top-12 -right-16 opacity-[0.08] blur-[2px] mix-blend-screen group-hover:scale-110 group-hover:opacity-[0.15] group-hover:-translate-x-2 transition-all duration-700 ease-out">
-                          <CarIcon className="w-80 h-80 scale-x-[-1]" />
-                        </div>
-                      )}
-                    </div>
-
-
-
-                    <div className="absolute inset-0 p-6 flex flex-col justify-end bg-gradient-to-t from-black via-black/60 to-transparent transition-all z-10">
-                      <h4 className="text-2xl font-bold mb-6 text-white tracking-tight">{car.name}</h4>
-
-                      <div className="flex justify-between items-end mb-4">
-                        <div>
-                          <p className="text-xs uppercase tracking-widest text-gray-500 mb-1 font-semibold">Listed Price</p>
-                          <p className="text-3xl font-extrabold text-white">${car.list_price.toLocaleString()}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs uppercase tracking-widest text-indigo-400/80 mb-1 font-semibold">AI Prediction</p>
-                          <p className="text-3xl font-extrabold text-indigo-300">${car.ai_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                        </div>
-                      </div>
-
-                      <div className={`mt-4 text-center py-2.5 rounded-xl text-sm font-bold tracking-wide transition-colors ${diff.colorClass} border ${diff.bgClass} flex items-center justify-center gap-2`}>
-                        {diff.text}
-                      </div>
-                    </div>
-                  </motion.a>
-                )
-              })
+              return carsToShow.map((car, i) => renderCarCard(car, i))
             } else {
               return (
                 <div className="col-span-3 text-center text-gray-500 py-10 flex justify-center items-center gap-2">
@@ -1151,6 +1148,98 @@ function App() {
             }
           })()}
         </div>
+
+        {/* Nationwide Arbitrage Section in Watchlist */}
+        {showWatchlist && user && watchlistCars.length > 0 && (
+          <div className="mt-12 border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 to-purple-500/5 rounded-3xl p-8 backdrop-blur-xl">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-2xl font-black text-white tracking-tight uppercase flex items-center gap-2">
+                  <svg className="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  Nationwide Arbitrage
+                </h2>
+                <p className="text-gray-400 text-sm mt-1">Fly there, buy the car, drive it home. We found the best cross-country deals for the models in your watchlist.</p>
+              </div>
+            </div>
+            
+            {loadingArbitrage ? (
+              <div className="flex justify-center items-center h-48">
+                <svg className="animate-spin h-8 w-8 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              </div>
+            ) : arbitrageDeals.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
+                {arbitrageDeals.map((car, i) => (
+                  <div key={i} className="flex flex-col">
+                    {renderCarCard(car, i)}
+                    {/* Travel Cost Breakdown Card */}
+                    <div className="mt-3 bg-[#0d0d1a] border border-indigo-500/20 rounded-2xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">The Play</span>
+                        <span className="text-[10px] text-gray-500">{car.origin_region_name} → {car.region_name}</span>
+                      </div>
+                      
+                      {/* Itemized costs */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-gray-400 flex items-center gap-1.5">
+                            <span>✈️</span> One-way flight
+                          </span>
+                          <span className="text-white font-medium">${car.travel_flight?.toLocaleString() || 0}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-gray-400 flex items-center gap-1.5">
+                            <span>⛽</span> Gas to drive back ({car.driving_miles?.toLocaleString() || 0} mi)
+                          </span>
+                          <span className="text-white font-medium">${car.travel_gas?.toLocaleString() || 0}</span>
+                        </div>
+                        {(car.travel_hotel > 0) && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-400 flex items-center gap-1.5">
+                              <span>🏨</span> Hotel ({car.drive_days - 1} night{car.drive_days - 1 !== 1 ? 's' : ''})
+                            </span>
+                            <span className="text-white font-medium">${car.travel_hotel?.toLocaleString()}</span>
+                          </div>
+                        )}
+                        {(car.travel_food > 0) && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-400 flex items-center gap-1.5">
+                              <span>🍔</span> Food ({car.drive_days} day{car.drive_days !== 1 ? 's' : ''})
+                            </span>
+                            <span className="text-white font-medium">${car.travel_food?.toLocaleString()}</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Divider */}
+                      <div className="border-t border-white/10 pt-2 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-gray-500">Total travel cost</span>
+                          <span className="text-white font-semibold">−${car.travel_cost?.toLocaleString()}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-gray-500">Car purchase price</span>
+                          <span className="text-white font-semibold">−${Math.round(car.list_price).toLocaleString()}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-gray-500">AI-estimated value at home</span>
+                          <span className="text-white font-semibold">+${Math.round(car.ai_price).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Net savings */}
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
+                        <p className="text-[10px] text-emerald-400 uppercase tracking-widest font-bold mb-0.5">Net Savings After Everything</p>
+                        <p className="text-2xl font-black text-emerald-300">${Math.round(car.net_savings).toLocaleString()}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-gray-400 py-10 italic">No worthwhile arbitrage deals found right now. Try saving more cars to your watchlist!</div>
+            )}
+          </div>
+        )}
 
         {!showWatchlist && hasMore && feed.length > 0 && (
           <div className="flex justify-center mt-12 mb-4">
@@ -1174,7 +1263,14 @@ function App() {
         )}
       </section>
       ) : (
-        <Insights initialMake={insightMake} initialModel={insightModel} />
+        <Insights 
+          initialMake={insightMake} 
+          initialModel={insightModel} 
+          selectedRegion={selectedRegion}
+          renderCarCard={renderCarCard}
+          user={user}
+          setShowAuthModal={setShowAuthModal}
+        />
       )}
       </div>
 
@@ -1239,6 +1335,63 @@ function App() {
                   {authMode === 'signin' ? 'Sign Up' : 'Sign In'}
                 </button>
               </p>
+            </motion.div>
+          </motion.div>
+        )}
+        
+        {showSettingsModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowSettingsModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-[#111] border border-white/10 rounded-2xl p-8 max-w-xl w-full shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold text-white">
+                  Account Settings
+                </h3>
+                <button onClick={() => setShowSettingsModal(false)} className="text-gray-400 hover:text-white">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+              </div>
+              
+              <div className="mb-8">
+                <label className="block text-sm font-medium text-gray-400 mb-3">Home Region</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {allRegions.map(r => (
+                    <button
+                      key={r.key}
+                      onClick={() => handleUpdateHomeRegion(r.key)}
+                      className={`py-2.5 rounded-xl text-sm font-medium transition border text-center ${
+                        user?.user_metadata?.home_region === r.key
+                          ? 'bg-indigo-600 text-white border-indigo-500 shadow-[0_0_15px_rgba(79,70,229,0.5)]'
+                          : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-3 flex items-center gap-1">
+                  <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  Your home region is used to calculate the most profitable cross-state arbitrage deals for you.
+                </p>
+              </div>
+              
+              <button 
+                onClick={() => setShowSettingsModal(false)}
+                className="w-full py-3 bg-white/10 text-white font-bold rounded-lg hover:bg-white/20 transition"
+              >
+                Done
+              </button>
             </motion.div>
           </motion.div>
         )}

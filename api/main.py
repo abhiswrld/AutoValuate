@@ -14,6 +14,7 @@ import uuid
 from typing import List
 import requests
 import time
+import math
 from dotenv import load_dotenv, find_dotenv
 
 # Find the .env file in the root directory and load it
@@ -66,7 +67,170 @@ valid_makes = ['toyota', 'honda', 'ford', 'chevrolet', 'chevy', 'nissan', 'bmw',
                'hyundai', 'kia', 'mazda', 'acura', 'jeep', 'dodge', 'ram', 'gmc', 'cadillac', 'infiniti', 'volvo', 'mitsubishi', 'mini', 'porsche', 
                'tesla', 'land', 'jaguar', 'chrysler', 'buick', 'pontiac', 'saturn', 'bentley', 'fiat']
 
-# Region cities whitelist removed; locations are now cleanly stored in the database.
+REGION_COORDS = {
+    'sfbay': (37.7749, -122.4194),
+    'losangeles': (34.0522, -118.2437),
+    'newyork': (40.7128, -74.0060),
+    'chicago': (41.8781, -87.6298),
+    'houston': (29.7604, -95.3698),
+    'phoenix': (33.4484, -112.0740),
+    'philadelphia': (39.9526, -75.1652),
+    'sanantonio': (29.4241, -98.4936),
+    'sandiego': (32.7157, -117.1611),
+    'dallas': (32.7767, -96.7970),
+    'sanjose': (37.3382, -121.8863),
+    'austin': (30.2672, -97.7431),
+    'jacksonville': (30.3322, -81.6557),
+    'fortworth': (32.7555, -97.3308),
+    'columbus': (39.9612, -82.9988),
+    'charlotte': (35.2271, -80.8431),
+    'seattle': (47.6062, -122.3321),
+    'denver': (39.7392, -104.9903),
+    'elpaso': (31.7619, -106.4850),
+    'detroit': (42.3314, -83.0458),
+    'washingtondc': (38.9072, -77.0369),
+    'boston': (42.3601, -71.0589),
+    'memphis': (35.1495, -90.0490),
+    'nashville': (36.1627, -86.7816),
+    'portland': (45.5152, -122.6784),
+    'oklahomacity': (35.4676, -97.5164),
+    'lasvegas': (36.1699, -115.1398),
+    'baltimore': (39.2904, -76.6122),
+    'louisville': (38.2527, -85.7585),
+    'milwaukee': (43.0389, -87.9065),
+    'albuquerque': (35.0844, -106.6504),
+    'tucson': (32.2226, -110.9747),
+    'fresno': (36.7378, -119.7871),
+    'sacramento': (38.5816, -121.4944),
+    'kansascity': (39.0997, -94.5786),
+    'longbeach': (33.7701, -118.1937),
+    'mesa': (33.4152, -111.8315),
+    'atlanta': (33.7490, -84.3880),
+    'coloradosprings': (38.8339, -104.8214),
+    'virginiabeach': (36.8529, -75.9780),
+    'raleigh': (35.7796, -78.6382),
+    'omaha': (41.2565, -95.9345),
+    'miami': (25.7617, -80.1918),
+    'oakland': (37.8044, -122.2712),
+    'minneapolis': (44.9778, -93.2650),
+    'tulsa': (36.1540, -95.9928),
+    # Previously missing regions from the DB
+    'cincinnati': (39.1031, -84.5120),
+    'cleveland': (41.4993, -81.6944),
+    'honolulu': (21.3069, -157.8583),
+    'indianapolis': (39.7684, -86.1581),
+    'neworleans': (29.9511, -90.0715),
+    'orlando': (28.5383, -81.3792),
+    'pittsburgh': (40.4406, -79.9959),
+    'richmond': (37.5407, -77.4360),
+    'saltlakecity': (40.7608, -111.8910),
+    'stlouis': (38.6270, -90.1994),
+    'tampa': (27.9506, -82.4572),
+}
+
+# Human-readable names for regions (used in Travel Math display)
+REGION_NAMES = {
+    'sfbay': 'SF Bay Area', 'losangeles': 'Los Angeles', 'newyork': 'New York',
+    'chicago': 'Chicago', 'houston': 'Houston', 'phoenix': 'Phoenix',
+    'philadelphia': 'Philadelphia', 'sanantonio': 'San Antonio', 'sandiego': 'San Diego',
+    'dallas': 'Dallas', 'sanjose': 'San Jose', 'austin': 'Austin',
+    'jacksonville': 'Jacksonville', 'fortworth': 'Fort Worth', 'columbus': 'Columbus',
+    'charlotte': 'Charlotte', 'seattle': 'Seattle', 'denver': 'Denver',
+    'elpaso': 'El Paso', 'detroit': 'Detroit', 'washingtondc': 'Washington DC',
+    'boston': 'Boston', 'memphis': 'Memphis', 'nashville': 'Nashville',
+    'portland': 'Portland', 'oklahomacity': 'Oklahoma City', 'lasvegas': 'Las Vegas',
+    'baltimore': 'Baltimore', 'louisville': 'Louisville', 'milwaukee': 'Milwaukee',
+    'albuquerque': 'Albuquerque', 'tucson': 'Tucson', 'fresno': 'Fresno',
+    'sacramento': 'Sacramento', 'kansascity': 'Kansas City', 'longbeach': 'Long Beach',
+    'mesa': 'Mesa', 'atlanta': 'Atlanta', 'coloradosprings': 'Colorado Springs',
+    'virginiabeach': 'Virginia Beach', 'raleigh': 'Raleigh', 'omaha': 'Omaha',
+    'miami': 'Miami', 'oakland': 'Oakland', 'minneapolis': 'Minneapolis',
+    'tulsa': 'Tulsa', 'cincinnati': 'Cincinnati', 'cleveland': 'Cleveland',
+    'honolulu': 'Honolulu', 'indianapolis': 'Indianapolis', 'neworleans': 'New Orleans',
+    'orlando': 'Orlando', 'pittsburgh': 'Pittsburgh', 'richmond': 'Richmond',
+    'saltlakecity': 'Salt Lake City', 'stlouis': 'St. Louis', 'tampa': 'Tampa',
+}
+
+def calculate_distance(lat1, lon1, lat2, lon2):
+    """Calculate the great circle distance in miles between two points on the earth."""
+    r = 3958.8  # Radius of earth in miles
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+    c = 2 * math.asin(math.sqrt(a))
+    return r * c
+
+def estimate_driving_distance(straight_line_miles):
+    """Roads aren't straight lines. Multiply by ~1.3 to approximate real driving distance."""
+    return round(straight_line_miles * 1.3)
+
+def calculate_travel_cost_breakdown(straight_line_miles):
+    """
+    Realistic travel cost model for: fly there one-way, drive the car back.
+    Returns a dict with itemized costs so the frontend can display a clean breakdown.
+    
+    Assumptions (sourced from BLS / AAA 2024-2025 averages):
+      - Domestic one-way flights: $80-$350 depending on distance
+      - Gas: national avg $3.40/gal, highway fuel economy ~27 MPG
+      - Hotels: ~$130/night (AAA average)
+      - Food: ~$45/day per diem
+      - Drive speed: ~500 miles per day of driving
+    """
+    driving_miles = estimate_driving_distance(straight_line_miles)
+    
+    if driving_miles < 60:
+        # Local-ish — just drive there, basically free
+        return {
+            "flight": 0,
+            "gas": round((driving_miles / 27) * 3.40),
+            "hotel": 0,
+            "food": 0,
+            "total": round((driving_miles / 27) * 3.40),
+            "driving_miles": driving_miles,
+            "drive_days": 0,
+            "method": "drive_both_ways"
+        }
+    
+    # --- One-way flight estimate ---
+    # Based on BLS Consumer Expenditure data & Google Flights averages:
+    #   < 500 mi: ~$90-150 (short hop, e.g. SF->LA, NY->DC)
+    #   500-1000 mi: ~$150-220 (medium, e.g. Chicago->NYC)
+    #   1000-2000 mi: ~$200-300 (cross-region, e.g. SF->Dallas)
+    #   2000+ mi: ~$250-350 (coast-to-coast, e.g. SF->NYC)
+    if straight_line_miles < 500:
+        flight = round(85 + straight_line_miles * 0.12)
+    elif straight_line_miles < 1000:
+        flight = round(120 + straight_line_miles * 0.10)
+    elif straight_line_miles < 2000:
+        flight = round(160 + straight_line_miles * 0.07)
+    else:
+        flight = round(200 + straight_line_miles * 0.05)
+    flight = min(flight, 380)  # Cap at reasonable domestic max
+    
+    # --- Gas to drive back ---
+    gas_per_gallon = 3.40
+    mpg = 27  # Average sedan highway MPG
+    gas = round((driving_miles / mpg) * gas_per_gallon)
+    
+    # --- Hotel & food (based on driving days) ---
+    drive_days = max(1, driving_miles // 500)  # ~500 miles per day of driving
+    hotel_nights = max(0, drive_days - 1)  # No hotel if it's a 1-day drive
+    hotel = hotel_nights * 130
+    food = drive_days * 45
+    
+    total = flight + gas + hotel + food
+    
+    return {
+        "flight": flight,
+        "gas": gas,
+        "hotel": hotel,
+        "food": food,
+        "total": total,
+        "driving_miles": driving_miles,
+        "drive_days": drive_days,
+        "method": "fly_and_drive"
+    }
 
 # Helper to format car names nicely (e.g., "toyota rav4" -> "Toyota RAV4")
 def format_car_name(year, make, model, trim=None):
@@ -230,20 +394,17 @@ def process_url_task(job_id: str, url: str):
             
             make_model_prices = avg_prices[(avg_prices['make'] == make.lower()) & (avg_prices['model'] == model_name.lower())]
             if not make_model_prices.empty:
-                max_year_row = make_model_prices.loc[make_model_prices['year'].idxmax()]
-                max_year = max_year_row['year']
-                max_price = max_year_row['avg_market_price']
+                # Use make+model median across all years as fallback anchor
+                median_price = make_model_prices['avg_market_price'].median()
                 
                 def fill_price(row):
                     if pd.isna(row['avg_market_price']):
-                        if row['year'] > max_year:
-                            return max_price * (1.05 ** (row['year'] - max_year))
-                        else:
-                            return max_price * (0.95 ** (max_year - row['year']))
+                        # Adjust make+model median by age
+                        return median_price * max(0.3, (0.95 ** row['age']))
                     return row['avg_market_price']
                 input_df['avg_market_price'] = input_df.apply(fill_price, axis=1)
             else:
-                input_df['avg_market_price'] = input_df['avg_market_price'].fillna(25000)
+                input_df['avg_market_price'] = input_df['avg_market_price'].fillna(5000)
         except Exception as e:
             print("Error loading avg_prices in live evaluation:", e)
             input_df['avg_market_price'] = 25000
@@ -294,9 +455,6 @@ def get_region_counts():
     if not db_engine:
         return {}
         
-    regions = ['sfbay', 'losangeles', 'newyork', 'seattle', 'chicago', 'dallas', 'miami', 'atlanta', 'boston', 'phoenix']
-    counts = {}
-    
     with db_engine.connect() as conn:
         total_query = text("""
             SELECT COUNT(*) FROM cars 
@@ -304,19 +462,33 @@ def get_region_counts():
             AND location IS NOT NULL AND location != 'null' AND TRIM(location) != '' AND location != 'Unknown'
         """)
         total_result = conn.execute(total_query)
-        counts['total'] = total_result.fetchone()[0]
+        total = total_result.fetchone()[0]
         
-        for region in regions:
-            query = text("""
-                SELECT COUNT(*) FROM cars 
-                WHERE region = :region 
-                AND make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
-                AND location IS NOT NULL AND location != 'null' AND TRIM(location) != '' AND location != 'Unknown'
-            """)
-            result = conn.execute(query, {"region": region})
-            counts[region] = result.fetchone()[0]
-            
-    return counts
+        # Dynamically get ALL regions with their counts, sorted by count desc
+        region_query = text("""
+            SELECT region, COUNT(*) as count FROM cars 
+            WHERE region IS NOT NULL AND region != 'other'
+            AND make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
+            AND location IS NOT NULL AND location != 'null' AND TRIM(location) != '' AND location != 'Unknown'
+            GROUP BY region
+            ORDER BY count DESC
+        """)
+        results = conn.execute(region_query).fetchall()
+        
+    counts = {"total": total}
+    # Return as ordered list of {key, label, count} for the frontend 
+    regions_list = []
+    for row in results:
+        region_key = str(row[0])
+        count = int(row[1])
+        counts[region_key] = count
+        regions_list.append({
+            "key": region_key,
+            "label": REGION_NAMES.get(region_key, region_key.title()),
+            "count": count
+        })
+    
+    return {"counts": counts, "regions": regions_list}
 
 @app.get("/cities")
 def get_cities(region: str):
@@ -423,6 +595,59 @@ def get_market_feed(region: str = "all", city: str = "all", sort_by: str = "best
         
     return feed_data
 
+@app.get("/feed/fresh")
+def get_fresh_drops():
+    if not db_engine:
+        return {"error": "Database not configured"}
+        
+    base_query = """
+        SELECT * FROM cars 
+        WHERE make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
+        AND location IS NOT NULL AND location != 'null' AND TRIM(location) != '' AND location != 'Unknown'
+        AND predicted_price IS NOT NULL AND predicted_price > 0
+        AND price >= 1500
+        AND price NOT IN (1234, 12345, 1111, 2222)
+        AND year >= 1996
+        AND difference > 0
+        AND created_at >= NOW() - INTERVAL '24 hours'
+        ORDER BY difference DESC
+        LIMIT 10
+    """
+    
+    df = pd.read_sql(text(base_query), db_engine)
+    
+    if len(df) == 0:
+        return []
+
+    # Force these columns to be numeric, convert all NaN/Infinity to 0
+    df['price'] = pd.to_numeric(df['price'], errors='coerce').fillna(0)
+    df['predicted_price'] = pd.to_numeric(df['predicted_price'], errors='coerce').fillna(0)
+    df['difference'] = pd.to_numeric(df['difference'], errors='coerce').fillna(0)
+    df['mileage'] = pd.to_numeric(df['mileage'], errors='coerce').fillna(0)
+
+    def clean_location(loc):
+        return str(loc).title()
+
+    feed_data = []
+    for _, row in df.iterrows():
+        clean_name = format_car_name(row.get('year'), row.get('make'), row.get('model'), row.get('trim'))
+            
+        feed_data.append({
+            "name": clean_name,
+            "make": str(row.get('make', '')).lower(),
+            "model": str(row.get('model', '')).lower(),
+            "mileage": int(row['mileage']),
+            "location": clean_location(row.get('location', 'unknown')),
+            "list_price": float(row['price']),
+            "ai_price": float(row['predicted_price']),
+            "difference": float(row['difference']),
+            "url": str(row.get('url', '#')),
+            "image_url": str(row.get('image_url', '')) if pd.notna(row.get('image_url')) else None,
+            "created_at": str(row.get('created_at', ''))
+        })
+        
+    return feed_data
+
 @app.post("/watchlist")
 def get_watchlist_cars(urls: List[str]):
     if not db_engine or not urls:
@@ -464,6 +689,94 @@ def get_watchlist_cars(urls: List[str]):
         })
         
     return feed_data
+
+
+@app.get("/feed/arbitrage")
+def get_arbitrage_deals(origin_region: str, make: str, model: str):
+    """
+    Finds deals in other regions that are highly underpriced.
+    The play: fly there one-way, buy the car, drive it home.
+    Returns itemized travel costs so users can see exactly where their money goes.
+    """
+    if not db_engine:
+        raise HTTPException(status_code=500, detail="Database not configured.")
+    
+    if origin_region not in REGION_COORDS:
+        origin_lat, origin_lon = REGION_COORDS['sfbay']
+        origin_region = 'sfbay'
+    else:
+        origin_lat, origin_lon = REGION_COORDS[origin_region]
+
+    make = make.strip().lower()
+    model = model.strip().lower()
+
+    query = text("""
+        SELECT * FROM cars 
+        WHERE make = :make 
+        AND model = :model 
+        AND region != :origin_region
+        AND price > 0
+        AND predicted_price > 0
+        AND price >= 1500
+        AND year >= 1996
+    """)
+
+    with db_engine.connect() as conn:
+        result = conn.execute(query, {"make": make, "model": model, "origin_region": origin_region})
+        df = pd.DataFrame(result.fetchall(), columns=result.keys())
+        
+    if df.empty:
+        return []
+
+    arbitrage_deals = []
+    
+    for _, row in df.iterrows():
+        car_region = row.get('region')
+        if not car_region or car_region not in REGION_COORDS:
+            continue
+            
+        car_lat, car_lon = REGION_COORDS[car_region]
+        straight_line_distance = calculate_distance(origin_lat, origin_lon, car_lat, car_lon)
+        travel = calculate_travel_cost_breakdown(straight_line_distance)
+        
+        list_price = float(row['price'])
+        ai_price = float(row['predicted_price'])
+        net_savings = ai_price - (list_price + travel['total'])
+        
+        # Only consider cars where net savings is substantially positive
+        if net_savings > 1500:
+            clean_name = format_car_name(row.get('year'), row.get('make'), row.get('model'), row.get('trim'))
+            
+            arbitrage_deals.append({
+                "name": clean_name,
+                "make": str(row.get('make', '')).lower(),
+                "model": str(row.get('model', '')).lower(),
+                "mileage": int(row.get('mileage', 0)),
+                "location": str(row.get('location', 'unknown')).title(),
+                "region": str(car_region),
+                "region_name": REGION_NAMES.get(car_region, car_region.title()),
+                "origin_region_name": REGION_NAMES.get(origin_region, origin_region.title()),
+                "list_price": list_price,
+                "ai_price": ai_price,
+                "difference": ai_price - list_price,
+                # Itemized travel costs
+                "travel_cost": travel['total'],
+                "travel_flight": travel['flight'],
+                "travel_gas": travel['gas'],
+                "travel_hotel": travel['hotel'],
+                "travel_food": travel['food'],
+                "travel_method": travel['method'],
+                "driving_miles": travel['driving_miles'],
+                "drive_days": travel['drive_days'],
+                "net_savings": net_savings,
+                "url": str(row.get('url', '#')),
+                "image_url": str(row.get('image_url', '')) if pd.notna(row.get('image_url')) else None
+            })
+            
+    arbitrage_deals.sort(key=lambda x: x['net_savings'], reverse=True)
+    
+    return arbitrage_deals[:6]
+
 
 @app.get("/insights/makes")
 def get_makes():
@@ -610,8 +923,9 @@ def get_depreciation_curve(make: str, model_name: str):
     df_synth['estimated_msrp'] = df_synth['avg_market_price'] * (1 + 0.10 * df_synth['age'])
     
     # Ensure monotonic decrease for the synthetic curve to prevent jagged edges
-    df_synth['avg_market_price'] = df_synth['avg_market_price'].cummax()
-    df_synth['estimated_msrp'] = df_synth['estimated_msrp'].cummax()
+    # We do this backwards (cummin from newest to oldest) so that early outliers don't pull the whole curve up
+    df_synth['avg_market_price'] = df_synth['avg_market_price'].iloc[::-1].cummin().iloc[::-1]
+    df_synth['estimated_msrp'] = df_synth['estimated_msrp'].iloc[::-1].cummin().iloc[::-1]
         
     # Predict!
     try:
