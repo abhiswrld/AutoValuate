@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import axios from 'axios'
 import { supabase } from './supabaseClient'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import Insights from './Insights'
 
 // Car icon, built from separate wheel, body, and window layers
@@ -193,7 +195,13 @@ function App() {
     setActiveTab('insights');
     document.getElementById('main-content')?.scrollIntoView({ behavior: 'smooth' });
   };
-  const [refreshCountdown, setRefreshCountdown] = useState(3600);
+  const getSecondsToNextHour = () => {
+    const now = new Date();
+    const nextHour = new Date();
+    nextHour.setHours(now.getHours() + 1, 0, 0, 0);
+    return Math.floor((nextHour.getTime() - now.getTime()) / 1000);
+  };
+  const [refreshCountdown, setRefreshCountdown] = useState(getSecondsToNextHour);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hotDealsPage, setHotDealsPage] = useState(0);
   const formatCountdown = (seconds) => {
@@ -220,6 +228,8 @@ function App() {
   const [authMode, setAuthMode] = useState('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [username, setUsername] = useState('')
+  const [authError, setAuthError] = useState('')
   const [user, setUser] = useState(null)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
@@ -231,6 +241,59 @@ function App() {
 
   const [reportingUrls, setReportingUrls] = useState({});
   const [toastMessage, setToastMessage] = useState(null);
+
+  // Chatbot States
+  const [chatMessages, setChatMessages] = useState([{ role: 'assistant', content: 'Welcome to AutoValuate AI. I can help you find the best car deals, show deep analytics, or set up email alerts. What are you looking for?' }]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatEndRef = useRef(null);
+
+  useEffect(() => {
+    if (activeTab === 'chat' && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, activeTab, isChatLoading]);
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+    
+    const userMsg = chatInput.trim();
+    setChatMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setChatInput('');
+    setIsChatLoading(true);
+    
+    try {
+      const res = await axios.post(`${API_URL}/chat`, {
+        message: userMsg,
+        user_id: user ? user.id : null,
+        history: chatMessages
+      });
+      
+      if (res.data.action === 'open_insights') {
+        res.data.response = "Taking you to the insights page...";
+      }
+      
+      const newMsg = { role: 'assistant', content: res.data.response };
+      if (res.data.cars && res.data.cars.length > 0) {
+        newMsg.cars = res.data.cars;
+      }
+      setChatMessages(prev => [...prev, newMsg]);
+      
+      if (res.data.action === 'open_insights') {
+        setInsightMake(res.data.make);
+        setInsightModel(res.data.model);
+        setActiveTab('insights');
+        setTimeout(() => {
+          document.getElementById('main-content')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+      }
+      
+    } catch (err) {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I'm having trouble connecting right now." }]);
+    }
+    setIsChatLoading(false);
+  };
 
   const handleReportSold = (e, url) => {
     e.preventDefault();
@@ -262,14 +325,12 @@ function App() {
     setLoadingFeed(true)
     axios.get(`${API_URL}/feed?region=${region}&city=${city}&sort_by=${sort}&offset=${currentOffset}`)
       .then(res => {
-        if (res.data.length < 15) setHasMore(false)
-        else setHasMore(true)
-        
         if (append) {
           setFeed(prev => [...prev, ...res.data])
         } else {
           setFeed(res.data)
         }
+        setHasMore(res.data.length === 15)
         setOffset(currentOffset)
       })
       .catch(err => console.error("Failed to load feed:", err))
@@ -431,13 +492,46 @@ function App() {
 
   const handleAuth = async (e) => {
     e.preventDefault()
+    setAuthError('')
     if (authMode === 'signup') {
-      const { error } = await supabase.auth.signUp({ email, password })
-      if (error) alert(error.message)
-      else alert('Check your email for the confirmation link!')
+      if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(username)) {
+        setAuthError('Username must start with a letter and contain only letters, numbers, and underscores.');
+        return;
+      }
+      try {
+        const res = await fetch(`http://localhost:8000/check_username?username=${username}`);
+        const data = await res.json();
+        if (!data.available) {
+          setAuthError('Username is already taken');
+          return;
+        }
+      } catch (err) {
+        setAuthError('Failed to verify username availability.');
+        return;
+      }
+
+      const { data: authData, error } = await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: { data: { username } }
+      })
+      
+      if (error) {
+        setAuthError(error.message)
+      } else {
+        if (authData?.user) {
+          await fetch('http://localhost:8000/create_profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: authData.user.id, username })
+          });
+        }
+        alert('Check your email for the confirmation link!')
+        setShowAuthModal(false)
+      }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) alert(error.message)
+      if (error) setAuthError(error.message)
       else setShowAuthModal(false)
     }
   }
@@ -641,7 +735,7 @@ function App() {
             {car.location}
           </span>
           <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-gray-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 font-medium w-fit">
-            {car.mileage.toLocaleString()} mi
+            {(car.mileage || 0).toLocaleString()} mi
           </span>
         </div>
 
@@ -718,16 +812,16 @@ function App() {
         </div>
 
         <div className="absolute inset-0 p-6 flex flex-col justify-end bg-gradient-to-t from-black via-black/60 to-transparent transition-all z-10">
-          <h4 className="text-2xl font-bold mb-6 text-white tracking-tight">{car.name}</h4>
+          <h4 className="text-2xl font-bold mb-6 text-white tracking-tight capitalize">{car.name || `${car.year} ${car.make} ${car.model}`}</h4>
 
           <div className="flex justify-between items-end mb-4">
             <div>
               <p className="text-xs uppercase tracking-widest text-gray-500 mb-1 font-semibold">Listed Price</p>
-              <p className="text-3xl font-extrabold text-white">${car.list_price.toLocaleString()}</p>
+              <p className="text-3xl font-extrabold text-white">${(car.list_price || car.price || 0).toLocaleString()}</p>
             </div>
             <div className="text-right">
               <p className="text-xs uppercase tracking-widest text-indigo-400/80 mb-1 font-semibold">AI Prediction</p>
-              <p className="text-3xl font-extrabold text-indigo-300">${car.ai_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+              <p className="text-3xl font-extrabold text-indigo-300">${(car.ai_price || car.predicted_price || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
             </div>
           </div>
 
@@ -743,7 +837,7 @@ function App() {
   const dynamicCutoff = Math.max(10, Math.floor(totalCarsInRegion / 100));
 
   return (
-    <div className="min-h-screen font-sans relative overflow-hidden">
+    <div className="min-h-screen font-sans relative">
 
       {/* Toast Notification */}
       <AnimatePresence>
@@ -759,7 +853,7 @@ function App() {
         )}
       </AnimatePresence>
 
-      <nav className="flex justify-between items-center px-12 py-6 border-b border-white/5 backdrop-blur-sm bg-black/20 z-10 relative">
+      <nav className="flex justify-between items-center px-12 py-6 border-b border-white/5 backdrop-blur-md bg-[#060608]/90 z-50 sticky top-0">
         <h1 className="flex items-center gap-4">
           <CarIcon className="w-14 h-14 scale-x-[-1] shrink-0" />
           <span className="text-gray-100 font-bold uppercase tracking-[0.2em] text-xl">
@@ -769,6 +863,7 @@ function App() {
         <div className="flex items-center space-x-8 text-base font-medium text-gray-400">
           <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('feed'); document.getElementById('main-content')?.scrollIntoView({ behavior: 'smooth' }); }} className={`transition ${activeTab === 'feed' ? 'text-white' : 'hover:text-white'}`}>Feed</a>
           <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('insights'); document.getElementById('main-content')?.scrollIntoView({ behavior: 'smooth' }); }} className={`transition ${activeTab === 'insights' ? 'text-white' : 'hover:text-white'}`}>Insights</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('chat'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className={`transition ${activeTab === 'chat' ? 'text-white' : 'hover:text-white'}`}>Ask AI</a>
           <a href={`${API_URL}/docs`} target="_blank" rel="noreferrer" className="hover:text-white transition">API</a>
           {user ? (
             <div className="relative">
@@ -776,30 +871,42 @@ function App() {
                 onClick={() => setShowProfileMenu(!showProfileMenu)} 
                 className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-lg hover:bg-indigo-500 transition shadow-lg ring-2 ring-indigo-500/50"
               >
-                {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
+                {(user.user_metadata?.username || user.email)[0].toUpperCase()}
               </button>
               
-              {showProfileMenu && (
-                <div className="absolute right-0 mt-3 w-48 bg-[#111] border border-white/10 rounded-xl shadow-2xl py-2 z-50">
-                  <div className="px-4 py-2 border-b border-white/5 mb-2">
-                    <p className="text-xs text-gray-400 truncate">{user.email}</p>
-                  </div>
-                  <button 
-                    onClick={() => { setShowProfileMenu(false); setShowSettingsModal(true); }}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition flex items-center gap-2"
+              <AnimatePresence>
+                {showProfileMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute right-0 mt-3 w-48 bg-[#111] border border-white/10 rounded-xl shadow-2xl py-2 z-50"
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                    Settings
-                  </button>
-                  <button 
-                    onClick={() => { setShowProfileMenu(false); handleLogout(); }}
-                    className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-white/5 hover:text-red-300 transition flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                    Logout
-                  </button>
-                </div>
-              )}
+                    <div className="px-4 py-2 border-b border-white/5 mb-2">
+                      <p className="text-sm font-bold text-white truncate">
+                        {user.user_metadata?.username || 'User'}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate mt-1">
+                        {user.email}
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => { setShowProfileMenu(false); setShowSettingsModal(true); }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                      Settings
+                    </button>
+                    <button 
+                      onClick={() => { setShowProfileMenu(false); handleLogout(); }}
+                      className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-white/5 hover:text-red-300 transition flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                      Logout
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           ) : (
             <button onClick={() => { setAuthMode('signin'); setShowAuthModal(true) }} className="px-4 py-1.5 bg-white/5 border border-white/10 text-white hover:bg-white/10 transition rounded-lg text-base">
@@ -1095,7 +1202,7 @@ function App() {
         {/* Title and Refresh Row */}
         <div className="flex justify-between items-center mb-8 gap-4">
           <div className="flex items-center gap-4">
-            <h3 className="text-3xl font-bold tracking-tight text-white">
+            <h3 className="text-3xl font-black tracking-tight text-white uppercase">
               {showWatchlist ? "My Saved Cars" : "Market Feed"}
             </h3>
             <button 
@@ -1116,38 +1223,58 @@ function App() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {(() => {
-            if (showWatchlist && !user) {
-              return (
-                <div className="col-span-3 flex flex-col items-center justify-center py-16 px-4 text-center border border-indigo-500/30 bg-indigo-500/10 rounded-3xl backdrop-blur-xl">
-                  <svg className="w-12 h-12 text-gray-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                  <h3 className="text-2xl font-bold text-white mb-2">Members Only Feature</h3>
-                  <p className="text-gray-400 max-w-lg mx-auto mb-6">Create a free account to save your favorite cars and instantly unlock the best cross-country arbitrage deals based on your watchlist.</p>
-                  <button 
-                    onClick={() => { setAuthMode('signup'); setShowAuthModal(true); }}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/25"
-                  >
-                    Sign In / Sign Up
-                  </button>
-                </div>
-              )
-            }
+        {!showWatchlist ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {(() => {
+              if (loadingFeed && feed.length === 0) {
+                return (
+                  <div className="col-span-3 text-center text-gray-500 py-10 flex justify-center items-center gap-2">
+                    <RefreshIcon className="w-4 h-4 animate-spin opacity-50" />
+                    Loading live market deals...
+                  </div>
+                )
+              }
+              if (feed.length === 0) {
+                return (
+                  <div className="col-span-3 text-center text-gray-500 py-10 flex justify-center items-center gap-2">
+                    No deals found for this region/city.
+                  </div>
+                )
+              }
+              return feed.map((car, i) => renderCarCard(car, i))
+            })()}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {(() => {
+              if (showWatchlist && !user) {
+                return (
+                  <div className="col-span-3 flex flex-col items-center justify-center py-16 px-4 text-center border border-indigo-500/30 bg-indigo-500/10 rounded-3xl backdrop-blur-xl">
+                    <svg className="w-12 h-12 text-gray-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                    <h3 className="text-2xl font-bold text-white mb-2">Members Only Feature</h3>
+                    <p className="text-gray-400 max-w-lg mx-auto mb-6">Create a free account to save your favorite cars and instantly unlock the best cross-country arbitrage deals based on your watchlist.</p>
+                    <button 
+                      onClick={() => { setAuthMode('signup'); setShowAuthModal(true); }}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/25"
+                    >
+                      Sign In / Sign Up
+                    </button>
+                  </div>
+                )
+              }
 
-            const carsToShow = showWatchlist ? watchlistCars : feed;
-            
-            if (carsToShow && carsToShow.length > 0) {
-              return carsToShow.map((car, i) => renderCarCard(car, i))
-            } else {
-              return (
-                <div className="col-span-3 text-center text-gray-500 py-10 flex justify-center items-center gap-2">
-                  <RefreshIcon className="w-4 h-4 animate-spin opacity-50" />
-                  {showWatchlist ? "No saved cars yet." : "Loading live market deals..."}
-                </div>
-              )
-            }
-          })()}
-        </div>
+              if (watchlistCars && watchlistCars.length > 0) {
+                return watchlistCars.map((car, i) => renderCarCard(car, i))
+              } else {
+                return (
+                  <div className="col-span-3 text-center text-gray-500 py-10 flex justify-center items-center gap-2">
+                    No saved cars yet.
+                  </div>
+                )
+              }
+            })()}
+          </div>
+        )}
 
         {/* Nationwide Arbitrage Section in Watchlist */}
         {showWatchlist && user && watchlistCars.length > 0 && (
@@ -1261,8 +1388,10 @@ function App() {
             </button>
           </div>
         )}
+
+
       </section>
-      ) : (
+      ) : activeTab === 'insights' ? (
         <Insights 
           initialMake={insightMake} 
           initialModel={insightModel} 
@@ -1271,6 +1400,84 @@ function App() {
           user={user}
           setShowAuthModal={setShowAuthModal}
         />
+      ) : (
+        /* Ask AI Chat Tab */
+        <section className="max-w-6xl mx-auto px-6 py-12 border-t border-white/5 relative z-10 min-h-[calc(100vh-200px)] flex flex-col">
+          <div className="flex-1 space-y-8 pb-10">
+            {chatMessages.map((msg, idx) => (
+              <div key={idx}>
+                {/* Inline car cards grid */}
+                {msg.cars && msg.cars.length > 0 && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: 0.1 }}
+                    className="mb-4"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {msg.cars.map((car, i) => renderCarCard(car, i))}
+                    </div>
+                  </motion.div>
+                )}
+                <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'assistant' && (
+                    <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mr-3 mt-1 shrink-0">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    </div>
+                  )}
+                  <div className={`${msg.role === 'user' ? 'max-w-[70%]' : 'max-w-full'} rounded-2xl px-5 py-3.5 text-[15px] leading-relaxed ${
+                    msg.role === 'user' 
+                      ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-tr-sm shadow-lg shadow-indigo-500/20' 
+                      : 'bg-white/[0.03] border border-white/[0.06] text-gray-200 rounded-tl-sm'
+                  }`}>
+                    {msg.role === 'assistant' ? (
+                      <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-a:text-indigo-400 overflow-x-auto">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      msg.content
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {isChatLoading && (
+              <div className="flex justify-start">
+                <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mr-3 shrink-0">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                </div>
+                <div className="bg-white/[0.03] border border-white/[0.06] text-gray-400 rounded-2xl rounded-tl-sm px-5 py-3.5 text-sm flex gap-1.5">
+                  <span className="animate-bounce">●</span><span className="animate-bounce" style={{animationDelay: '0.2s'}}>●</span><span className="animate-bounce" style={{animationDelay: '0.4s'}}>●</span>
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Sticky Input */}
+          <div className="sticky bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-[#060608] via-[#060608] to-transparent pt-12 pb-2 mt-auto">
+            <form onSubmit={handleSendMessage} className="max-w-6xl mx-auto px-0 md:px-6">
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Ask about cars, deals, or market trends..."
+                  className="w-full bg-[#151620]/90 backdrop-blur-xl hover:bg-[#1a1b26]/90 focus:bg-[#1a1b26]/90 border border-white/[0.08] focus:border-indigo-500/50 text-white text-[15px] rounded-2xl py-4 pl-6 pr-14 focus:outline-none transition-all placeholder:text-gray-500 shadow-2xl"
+                />
+                <button 
+                  type="submit" 
+                  disabled={!chatInput.trim() || isChatLoading}
+                  className="absolute right-2 w-10 h-10 bg-indigo-600 hover:bg-indigo-500 rounded-xl flex items-center justify-center text-white transition-all disabled:opacity-30 disabled:bg-white/10"
+                >
+                  <svg className="w-4 h-4 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
       )}
       </div>
 
@@ -1303,10 +1510,26 @@ function App() {
                 {authMode === 'signin' ? 'Welcome Back' : 'Create Account'}
               </h3>
               <form onSubmit={handleAuth} className="space-y-4">
+                {authMode === 'signup' && (
+                  <input 
+                    type="text" 
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      setAuthError('');
+                    }}
+                    placeholder="Username" 
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 text-white rounded-lg focus:outline-none focus:border-indigo-500"
+                    required
+                  />
+                )}
                 <input 
                   type="email" 
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setAuthError('');
+                  }}
                   placeholder="Email" 
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 text-white rounded-lg focus:outline-none focus:border-indigo-500"
                   required
@@ -1314,11 +1537,19 @@ function App() {
                 <input 
                   type="password" 
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setAuthError('');
+                  }}
                   placeholder="Password" 
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 text-white rounded-lg focus:outline-none focus:border-indigo-500"
                   required
                 />
+                {authError && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <p className="text-xs text-red-400 text-center">{authError}</p>
+                  </div>
+                )}
                 <button 
                   type="submit"
                   className="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-500 transition"
@@ -1396,6 +1627,8 @@ function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+
     </div>
   )
 }

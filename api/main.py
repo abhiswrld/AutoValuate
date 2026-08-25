@@ -63,6 +63,10 @@ jobs = {}
 class URLData(BaseModel):
     url: str
 
+class ProfileData(BaseModel):
+    user_id: str
+    username: str
+
 valid_makes = ['toyota', 'honda', 'ford', 'chevrolet', 'chevy', 'nissan', 'bmw', 'mercedes', 'benz', 'audi', 'lexus', 'subaru', 'volkswagen', 'vw', 
                'hyundai', 'kia', 'mazda', 'acura', 'jeep', 'dodge', 'ram', 'gmc', 'cadillac', 'infiniti', 'volvo', 'mitsubishi', 'mini', 'porsche', 
                'tesla', 'land', 'jaguar', 'chrysler', 'buick', 'pontiac', 'saturn', 'bentley', 'fiat']
@@ -295,6 +299,116 @@ def extract_specs_from_soup(soup):
     return data
 
 # --- ENDPOINTS ---
+
+@app.get("/check_username")
+def check_username(username: str):
+    if not db_engine:
+        return {"error": "Database not configured"}
+    
+    with db_engine.connect() as conn:
+        result = conn.execute(
+            text("SELECT COUNT(*) FROM profiles WHERE LOWER(username) = LOWER(:username)"),
+            {"username": username}
+        ).fetchone()
+        
+    return {"available": result[0] == 0}
+
+@app.post("/create_profile")
+def create_profile(data: ProfileData):
+    if not db_engine:
+        raise HTTPException(status_code=500, detail="Database not configured")
+        
+    try:
+        with db_engine.begin() as conn:
+            conn.execute(
+                text("INSERT INTO profiles (id, username) VALUES (:user_id, :username)"),
+                {"user_id": data.user_id, "username": data.username}
+            )
+        return {"success": True}
+    except Exception as e:
+        if "unique constraint" in str(e).lower():
+            raise HTTPException(status_code=400, detail="Username already taken")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/feed/hubs")
+def get_feed_hubs(region: str = "all", city: str = "all"):
+    if not db_engine:
+        return {"error": "Database not configured"}
+        
+    base_query = """
+        FROM cars 
+        WHERE make IS NOT NULL AND model IS NOT NULL AND trim IS NOT NULL AND trim != 'Error'
+        AND location IS NOT NULL AND location != 'null' AND TRIM(location) != '' AND location != 'Unknown'
+        AND predicted_price IS NOT NULL AND predicted_price > 0
+        AND price >= 1500
+        AND price NOT IN (1234, 12345, 1111, 2222)
+        AND year >= 1996
+    """
+    params = {}
+    
+    if region != 'all':
+        base_query += " AND region = :region"
+        params['region'] = region
+        if city != 'all':
+            base_query += " AND LOWER(location) = LOWER(:city)"
+            params['city'] = city
+
+    hubs = [
+        {
+            "title": "Reliable Commuters (Honda & Toyota)",
+            "condition": "make IN ('honda', 'toyota')",
+            "limit": 10
+        },
+        {
+            "title": "Luxury on a Budget (< $15k)",
+            "condition": "make IN ('bmw', 'mercedes-benz', 'audi', 'lexus', 'acura', 'infiniti') AND price <= 15000",
+            "limit": 10
+        },
+        {
+            "title": "Sporty & Fun",
+            "condition": "make IN ('porsche') OR model IN ('mustang', 'camaro', 'corvette', 'miata', 'mx-5 miata', 'wrx', 'brz', 'challenger')",
+            "limit": 10
+        },
+        {
+            "title": "Top JDM Deals",
+            "condition": "make IN ('honda', 'toyota', 'subaru', 'mazda', 'nissan')",
+            "limit": 10
+        },
+        {
+            "title": "Unkillable Workhorses (Trucks & SUVs)",
+            "condition": "type IN ('pickup', 'truck', 'suv') OR model IN ('tacoma', 'f-150', 'silverado', 'sierra', '4runner')",
+            "limit": 10
+        }
+    ]
+
+    hub_results = []
+    
+    with db_engine.connect() as conn:
+        for hub in hubs:
+            query = f"""
+                SELECT * {base_query}
+                AND ({hub['condition']})
+                ORDER BY difference DESC
+                LIMIT {hub['limit']}
+            """
+            result = conn.execute(text(query), params)
+            rows = result.fetchall()
+            keys = result.keys()
+            
+            cars = []
+            for row in rows:
+                row_dict = dict(zip(keys, row))
+                # Add default values just like /feed
+                row_dict['image_url'] = row_dict.get('image_url') if row_dict.get('image_url') else None
+                cars.append(row_dict)
+                
+            if cars:
+                hub_results.append({
+                    "title": hub["title"],
+                    "cars": cars
+                })
+                
+    return hub_results
 
 @app.post("/evaluate_url")
 def evaluate_url(url_data: URLData, background_tasks: BackgroundTasks):
@@ -1056,3 +1170,328 @@ def report_sold(payload: ReportSoldRequest):
             return {"status": "alive", "message": "Listing still appears to be active."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+from fastapi import Request
+from pydantic import BaseModel
+from typing import Optional
+from groq import Groq
+import json
+
+class ChatRequest(BaseModel):
+    message: str
+    user_id: Optional[str] = None
+    history: list = []
+
+# Initialize Groq client
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY")) if os.getenv("GROQ_API_KEY") else None
+
+@app.post("/chat")
+def chat_with_agent(req: ChatRequest):
+    if not groq_client:
+        return {"response": "AI Assistant is currently offline. (Missing Groq API Key)"}
+    
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "search_cars",
+                "description": "Search the live car database for deals matching user criteria.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {"type": "string", "description": "City or region, e.g., 'sfbay', 'cupertino'"},
+                        "max_price": {"type": "integer", "description": "Maximum price in dollars"},
+                        "min_price": {"type": "integer", "description": "Minimum price in dollars"},
+                        "make": {"type": "string", "description": "Car make, e.g., 'toyota'"},
+                        "model": {"type": "string", "description": "Car model, e.g., 'camry'"},
+                        "category": {"type": "string", "description": "Category like 'reliable', 'luxury', 'sporty'"},
+                        "sort": {"type": "string", "description": "How to sort results. Options: 'best_deal', 'worst_deal', 'lowest_price', 'highest_price', 'random'. Default: 'random'"},
+                        "offset": {"type": "integer", "description": "Number of cars to skip for pagination (default 0)"}
+                    }
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "count_cars",
+                "description": "Count the number of cars matching criteria WITHOUT returning the actual car listings.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {"type": "string"},
+                        "max_price": {"type": "integer"},
+                        "min_price": {"type": "integer"},
+                        "make": {"type": "string"},
+                        "model": {"type": "string"},
+                        "category": {"type": "string"}
+                    }
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "create_alert",
+                "description": "Create an email alert for the user if they ask to be notified when a car matching their criteria pops up.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {"type": "string"},
+                        "max_price": {"type": "integer"},
+                        "make": {"type": "string"},
+                        "model": {"type": "string"}
+                    },
+                    "required": ["make", "model", "max_price"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "open_insights_page",
+                "description": "Navigate the user to the deep analytics Insights dashboard for a specific car make and model.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "make": {"type": "string", "description": "The car make, e.g., 'lexus'"},
+                        "model": {"type": "string", "description": "The car model, e.g., 'nx 300h'"}
+                    },
+                    "required": ["make", "model"]
+                }
+            }
+        }
+    ]
+    
+    messages = [
+        {"role": "system", "content": "You are a concise, professional automotive analyst for AutoValuate. Help users find the best car deals and provide data-driven insights. ALWAYS use tools when relevant. Keep responses SHORT (1-2 sentences max). DO NOT USE EMOJIS. The frontend renders beautiful car cards below your message. CRITICAL: NEVER output a table or a list of cars in your text response. Just say something conversational like 'Here are the cars I found for you in NY' or 'I found 9 cars matching your criteria.' If the tool says 'More available: True', explicitly add 'Let me know if you want to see more!' at the end."}
+    ]
+    
+    # Append past conversation memory
+    if req.history:
+        for msg in req.history:
+            if msg.get('role') in ['user', 'assistant'] and msg.get('content'):
+                messages.append({"role": msg['role'], "content": msg['content']})
+                
+    messages.append({"role": "user", "content": req.message})
+    
+    response = groq_client.chat.completions.create(
+        model="openai/gpt-oss-20b",
+        messages=messages,
+        tools=tools,
+        tool_choice="auto"
+    )
+    
+    response_message = response.choices[0].message
+    tool_calls = response_message.tool_calls
+    
+    if tool_calls:
+        messages.append(response_message)
+        
+        found_structured_cars = []
+        action_payload = None
+        
+        for tool_call in tool_calls:
+            function_name = tool_call.function.name
+            function_args = json.loads(tool_call.function.arguments)
+            
+            if function_name == "search_cars":
+                # Execute database query
+                query = "SELECT * FROM cars WHERE price > 0 AND predicted_price > 0 AND difference IS NOT NULL "
+                params = {}
+                region_used = None
+                if 'make' in function_args:
+                    query += " AND make = :make"
+                    params['make'] = function_args['make'].lower()
+                elif 'category' in function_args:
+                    cat = function_args['category'].lower()
+                    if 'reliable' in cat: query += " AND make IN ('toyota', 'honda')"
+                    elif 'luxury' in cat: query += " AND make IN ('bmw', 'mercedes-benz', 'audi', 'lexus')"
+                    elif 'sport' in cat: query += " AND make IN ('porsche') OR model IN ('mustang', 'camaro', 'corvette', 'wrx')"
+                
+                if 'max_price' in function_args:
+                    query += " AND price <= :max_price"
+                    params['max_price'] = function_args['max_price']
+                    
+                if 'min_price' in function_args:
+                    query += " AND price >= :min_price"
+                    params['min_price'] = function_args['min_price']
+                    
+                if 'location' in function_args:
+                    loc = function_args['location'].lower()
+                    
+                    # Map common abbreviations to Craigslist regions
+                    abbrev_map = {
+                        'la': 'losangeles', 'l.a.': 'losangeles', 'los angeles': 'losangeles',
+                        'ny': 'newyork', 'n.y.': 'newyork', 'new york': 'newyork',
+                        'sf': 'sfbay', 'sf bay': 'sfbay', 'san francisco': 'sfbay',
+                        'dc': 'washingtondc', 'd.c.': 'washingtondc', 'washington dc': 'washingtondc',
+                        'vegas': 'lasvegas', 'las vegas': 'lasvegas',
+                        'sd': 'sandiego', 'san diego': 'sandiego',
+                        'dfw': 'dallas'
+                    }
+                    if loc in abbrev_map:
+                        loc = abbrev_map[loc]
+                        
+                    query += " AND (region = :location OR location ILIKE :loc_exact OR location ILIKE :loc_start OR location ILIKE :loc_end OR location ILIKE :loc_mid)"
+                    params['location'] = loc
+                    params['loc_exact'] = loc
+                    params['loc_start'] = f"{loc} %"
+                    params['loc_end'] = f"% {loc}"
+                    params['loc_mid'] = f"% {loc} %"
+                    region_used = loc
+                    
+                sort_mode = function_args.get('sort', 'random')
+                if sort_mode == 'worst_deal':
+                    query += " ORDER BY difference ASC"
+                elif sort_mode == 'lowest_price':
+                    query += " ORDER BY price ASC"
+                elif sort_mode == 'highest_price':
+                    query += " ORDER BY price DESC"
+                elif sort_mode == 'random':
+                    query += " ORDER BY RANDOM()"
+                else:
+                    query += " ORDER BY difference DESC"
+                    
+                # We query 10 to check if there's more, but only return 9
+                query += " LIMIT 10 OFFSET :offset"
+                params['offset'] = function_args.get('offset', 0)
+                
+                try:
+                    df = pd.read_sql(text(query), db_engine, params=params)
+                    has_more = len(df) == 10
+                    df = df.head(9)
+                    
+                    if len(df) > 0:
+                        df['price'] = pd.to_numeric(df['price'], errors='coerce').fillna(0)
+                        df['predicted_price'] = pd.to_numeric(df['predicted_price'], errors='coerce').fillna(0)
+                        df['difference'] = pd.to_numeric(df['difference'], errors='coerce').fillna(0)
+                        df['mileage'] = pd.to_numeric(df['mileage'], errors='coerce').fillna(0)
+
+                        for _, row in df.iterrows():
+                            clean_name = format_car_name(row.get('year'), row.get('make'), row.get('model'), row.get('trim'))
+                            found_structured_cars.append({
+                                "name": clean_name,
+                                "make": str(row.get('make', '')).lower(),
+                                "model": str(row.get('model', '')).lower(),
+                                "mileage": int(row['mileage']),
+                                "location": str(row.get('location', 'unknown')).title(),
+                                "list_price": float(row['price']),
+                                "ai_price": float(row['predicted_price']),
+                                "difference": float(row['difference']),
+                                "url": str(row.get('url', '#')),
+                                "image_url": str(row.get('image_url', '')) if pd.notna(row.get('image_url')) else None
+                            })
+                            
+                        best = max(found_structured_cars, key=lambda c: c['difference'])
+                        cars_summary = [f"Name: {c['name']} | Listed: ${int(c['list_price']):,} | Value: ${int(c['ai_price']):,} | Gap: ${int(c['difference']):,}" for c in found_structured_cars]
+                        tool_response = f"Found {len(found_structured_cars)} cars (More available: {has_more}):\n" + "\n".join(cars_summary)
+                    else:
+                        tool_response = "No cars found matching those exact criteria."
+                except Exception as e:
+                    tool_response = f"Database error: {str(e)}"
+                    
+            elif function_name == "count_cars":
+                query = "SELECT COUNT(*) FROM cars WHERE price > 0 AND predicted_price > 0 AND difference IS NOT NULL "
+                params = {}
+                if 'make' in function_args:
+                    query += " AND make = :make"
+                    params['make'] = function_args['make'].lower()
+                elif 'category' in function_args:
+                    cat = function_args['category'].lower()
+                    if 'reliable' in cat: query += " AND make IN ('toyota', 'honda')"
+                    elif 'luxury' in cat: query += " AND make IN ('bmw', 'mercedes-benz', 'audi', 'lexus')"
+                    elif 'sport' in cat: query += " AND make IN ('porsche') OR model IN ('mustang', 'camaro', 'corvette', 'wrx')"
+                
+                if 'max_price' in function_args:
+                    query += " AND price <= :max_price"
+                    params['max_price'] = function_args['max_price']
+                    
+                if 'min_price' in function_args:
+                    query += " AND price >= :min_price"
+                    params['min_price'] = function_args['min_price']
+                    
+                if 'location' in function_args:
+                    loc = function_args['location'].lower()
+                    abbrev_map = {
+                        'la': 'losangeles', 'l.a.': 'losangeles', 'los angeles': 'losangeles',
+                        'ny': 'newyork', 'n.y.': 'newyork', 'new york': 'newyork',
+                        'sf': 'sfbay', 'sf bay': 'sfbay', 'san francisco': 'sfbay',
+                        'dc': 'washingtondc', 'd.c.': 'washingtondc', 'washington dc': 'washingtondc',
+                        'vegas': 'lasvegas', 'las vegas': 'lasvegas',
+                        'sd': 'sandiego', 'san diego': 'sandiego',
+                        'dfw': 'dallas'
+                    }
+                    if loc in abbrev_map: loc = abbrev_map[loc]
+                    query += " AND (region = :location OR location ILIKE :loc_exact OR location ILIKE :loc_start OR location ILIKE :loc_end OR location ILIKE :loc_mid)"
+                    params['location'] = loc
+                    params['loc_exact'] = loc
+                    params['loc_start'] = f"{loc} %"
+                    params['loc_end'] = f"% {loc}"
+                    params['loc_mid'] = f"% {loc} %"
+                
+                try:
+                    with db_engine.connect() as conn:
+                        result = conn.execute(text(query), params).scalar()
+                    tool_response = f"Found exactly {result} cars matching these criteria."
+                except Exception as e:
+                    tool_response = f"Database error: {str(e)}"
+                    
+            elif function_name == "create_alert":
+                if not req.user_id:
+                    tool_response = "Error: You must be logged in to create an alert."
+                else:
+                    try:
+                        with db_engine.begin() as conn:
+                            conn.execute(text("""
+                                INSERT INTO user_alerts (user_id, make, model, max_price, region)
+                                VALUES (:uid, :make, :model, :max_price, :region)
+                            """), {
+                                "uid": req.user_id,
+                                "make": function_args.get('make', '').lower(),
+                                "model": function_args.get('model', '').lower(),
+                                "max_price": function_args.get('max_price'),
+                                "region": function_args.get('location', '').lower()
+                            })
+                        tool_response = "Alert successfully saved to database! I will email you when a match pops up."
+                    except Exception as e:
+                        tool_response = f"Failed to save alert: {str(e)}"
+            
+            elif function_name == "open_insights_page":
+                action_payload = {
+                    "action": "open_insights",
+                    "make": function_args.get("make"),
+                    "model": function_args.get("model")
+                }
+                tool_response = f"Successfully navigated user to insights for {function_args.get('make')} {function_args.get('model')}."
+            
+            messages.append(
+                {
+                    "tool_call_id": tool_call.id,
+                    "role": "tool",
+                    "name": function_name,
+                    "content": tool_response,
+                }
+            )
+            
+        # Second LLM call to summarize the tool results
+        second_response = groq_client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=messages,
+            tools=tools
+        )
+        
+        final_return = {
+            "response": second_response.choices[0].message.content,
+            "cars": found_structured_cars
+        }
+        if action_payload:
+            final_return.update(action_payload)
+        
+        # If we just did a car search, return the region we detected
+        if not action_payload and 'region_used' in locals() and region_used:
+            final_return['region'] = region_used
+            
+        return final_return
+    
+    return {"response": response_message.content}

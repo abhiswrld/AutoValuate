@@ -20,9 +20,13 @@ def clean_and_upload():
     
     # 1. Basic Cleaning
     df['location'] = df['location'].astype(str).str.split('/').str[0].str.lower().str.strip()
+    
+    # Filter out wrecked/salvage titles based on keywords in the name
+    salvage_keywords = ['wreck', 'salvage', 'parts only', 'mechanic special', 'blown', 'needs engine', 'needs transmission', 'fire damage', 'flood']
+    df = df[~df['name'].str.lower().str.contains('|'.join(salvage_keywords), na=False)]
+    
     df = df.dropna(subset=['price', 'mileage'])
     df = df[(df['price'] >= 800) & (df['price'] <= 100000)]
-    df = df[(df['mileage'] >= 100) & (df['mileage'] <= 300000)]
     
     # 2. Extract Year/Age (We still parse this from the title for the ML model)
     df['year'] = df['name'].astype(str).str.extract(r'(\b(19[0-9]{2}|20[0-2][0-9])\b)')[0]
@@ -30,6 +34,10 @@ def clean_and_upload():
     df['year'] = df['year'].astype(int)
     current_year = datetime.datetime.now().year
     df['age'] = current_year - df['year']
+    
+    # Fix low mileage listings (e.g. 150 meaning 150,000) for older cars
+    df.loc[(df['mileage'] < 1000) & (df['age'] >= 2), 'mileage'] = df['mileage'] * 1000
+    df = df[(df['mileage'] >= 100) & (df['mileage'] <= 300000)]
     
     # 3. Prepare for upload (Drop rows missing core requirements)
     df = df.dropna(subset=['age', 'mileage', 'location', 'price', 'url'])

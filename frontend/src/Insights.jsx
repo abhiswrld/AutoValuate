@@ -570,7 +570,7 @@ const Insights = ({ initialMake = '', initialModel = '', selectedRegion = 'sfbay
                     <ResponsiveContainer width="100%" height="90%">
                       <BarChart data={dealQualityData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
                         <RechartsXAxis type="number" hide />
-                        <RechartsYAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#f3f4f6', fontSize: 15, fontWeight: 'bold', dx: -5 }} width={140} />
+                        <RechartsYAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#f3f4f6', fontSize: 15, fontWeight: 'bold', dx: -5 }} width={175} />
                         <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={45} isAnimationActive={false}>
                           {dealQualityData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.fill} />
