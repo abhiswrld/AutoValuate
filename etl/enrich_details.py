@@ -95,7 +95,8 @@ def get_car_details(url):
 
     data = {
         'condition': None, 'title_status': None, 'cylinders': None,
-        'drive': None, 'fuel': None, 'transmission': None, 'type': None
+        'drive': None, 'fuel': None, 'transmission': None, 'type': None,
+        'vin': None, 'engine_size': None
     }
 
     valid_makes = ['toyota', 'honda', 'ford', 'chevrolet', 'chevy', 'nissan', 'bmw', 'mercedes', 'benz', 'mercedes-benz', 'audi', 'lexus', 'subaru', 'volkswagen', 
@@ -256,6 +257,25 @@ def get_car_details(url):
     meta_image = soup.find('meta', property='og:image')
     data['image_url'] = meta_image.get('content') if meta_image else None
 
+    # VIN Extraction & NHTSA Decoding
+    vin_match = re.search(r'\b([A-HJ-NPR-Z0-9]{17})\b', soup.text)
+    if vin_match:
+        data['vin'] = vin_match.group(1)
+        try:
+            vin_resp = requests.get(f"https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVin/{data['vin']}?format=json", timeout=5)
+            if vin_resp.status_code == 200:
+                for item in vin_resp.json().get('Results', []):
+                    var = item.get('Variable')
+                    val = item.get('Value')
+                    if val and str(val).lower() != 'not applicable':
+                        if var == 'Trim': data['trim'] = val
+                        elif var == 'Drive Type': data['drive'] = val
+                        elif var == 'Engine Number of Cylinders': data['cylinders'] = val
+                        elif var == 'Fuel Type - Primary': data['fuel'] = val
+                        elif var == 'Displacement (L)': data['engine_size'] = val
+        except Exception as e:
+            print(f"VIN Decode failed: {e}")
+
     # Prevent infinite loops: if a spec wasn't found, mark as 'unspecified'
     for key in ['condition', 'title_status', 'cylinders', 'drive', 'fuel', 'transmission', 'type']:
         if not data[key]:
@@ -282,11 +302,13 @@ def enrich_database():
         conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS transmission TEXT;"))
         conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS type TEXT;"))
         conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS trim TEXT;"))
+        conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS vin TEXT;"))
+        conn.execute(text("ALTER TABLE cars ADD COLUMN IF NOT EXISTS engine_size TEXT;"))
         conn.commit()
 
     # Grab cars where the new deep-scrape features are missing
     with engine.connect() as connection:
-        query = text("SELECT url FROM cars WHERE cylinders IS NULL ORDER BY year DESC NULLS LAST, created_at DESC LIMIT 1000")
+        query = text("SELECT url FROM cars WHERE cylinders IS NULL OR vin IS NULL ORDER BY created_at DESC LIMIT 1000")
         result = connection.execute(query)
         cars_to_update = result.fetchall()
 
@@ -318,7 +340,8 @@ def enrich_database():
                         make = :make, model = :model, trim = :trim,
                         location = COALESCE(NULLIF(:loc, 'Unknown'), location),
                         region = CASE WHEN :reg != 'other' THEN :reg ELSE region END,
-                        image_url = COALESCE(:img, image_url)
+                        image_url = COALESCE(:img, image_url),
+                        vin = :vin, engine_size = :engine_size
                     WHERE url = :url
                 """)
                 conn.execute(update_query, {
@@ -335,6 +358,8 @@ def enrich_database():
                     "loc": details.get('location'),
                     "reg": details.get('region', 'other'),
                     "img": details.get('image_url'),
+                    "vin": details.get('vin'),
+                    "engine_size": details.get('engine_size'),
                     "url": url
                 })
                 updated_count += 1
