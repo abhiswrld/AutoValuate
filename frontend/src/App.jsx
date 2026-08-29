@@ -264,10 +264,19 @@ function App() {
     setIsChatLoading(true);
     
     try {
+      // Inject context of previously shown cars into the memory so the AI remembers them for multi-turn conversations
+      const contextRichHistory = chatMessages.map(msg => {
+        if (msg.role === 'assistant' && msg.cars && msg.cars.length > 0) {
+          const carContext = msg.cars.map(c => `${c.name} (Price: $${c.list_price}, URL/ID: ${c.url})`).join(" | ");
+          return { ...msg, content: `${msg.content}\n[SYSTEM: I showed the user these cars: ${carContext}]` };
+        }
+        return msg;
+      });
+
       const res = await axios.post(`${API_URL}/chat`, {
         message: userMsg,
         user_id: user ? user.id : null,
-        history: chatMessages
+        history: contextRichHistory
       });
       
       if (res.data.action === 'open_insights') {
@@ -1403,19 +1412,36 @@ function App() {
       ) : (
         /* Ask AI Chat Tab */
         <section className="max-w-6xl mx-auto px-6 py-12 border-t border-white/5 relative z-10 min-h-[calc(100vh-200px)] flex flex-col">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-2xl font-bold text-white tracking-tight">AutoValuate <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">AI</span></h2>
+            <button 
+              onClick={() => {
+                setChatMessages([{ role: 'assistant', content: 'Welcome to AutoValuate AI! I can analyze the market, find arbitrage deals, and manage your watchlist. How can I help you today?' }]);
+                setChatInput('');
+              }} 
+              className="text-xs px-3 py-1.5 rounded-full border border-white/10 hover:bg-white/5 text-gray-400 hover:text-white transition flex items-center gap-2"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              Clear Chat
+            </button>
+          </div>
           <div className="flex-1 space-y-8 pb-10">
             {chatMessages.map((msg, idx) => (
               <div key={idx}>
-                {/* Inline car cards grid */}
+                {/* Horizontal car cards carousel */}
                 {msg.cars && msg.cars.length > 0 && (
                   <motion.div 
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, delay: 0.1 }}
-                    className="mb-4"
+                    className="mb-6 -mx-6 px-6 md:mx-0 md:px-0"
                   >
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      {msg.cars.map((car, i) => renderCarCard(car, i))}
+                    <div className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar space-x-6 pb-6">
+                      {msg.cars.map((car, i) => (
+                        <div key={i} className="min-w-[85vw] md:min-w-[350px] snap-center shrink-0">
+                          {renderCarCard(car, i)}
+                        </div>
+                      ))}
                     </div>
                   </motion.div>
                 )}
@@ -1456,8 +1482,33 @@ function App() {
             <div ref={chatEndRef} />
           </div>
 
-          {/* Sticky Input */}
+          {/* Sticky Input with Quick Replies */}
           <div className="sticky bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-[#060608] via-[#060608] to-transparent pt-12 pb-2 mt-auto">
+            <div className="max-w-6xl mx-auto px-0 md:px-6 mb-3">
+              <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1 px-4 md:px-0">
+                {(chatMessages.length <= 1 ? [
+                  "Find me a reliable Honda under $10k",
+                  "What's the best SUV deal in SF?",
+                  "Show me luxury cars under $30k"
+                ] : [...chatMessages].reverse().find(m => m.role === 'assistant')?.cars?.length > 0 ? [
+                  "Which one has the lowest mileage?",
+                  "Are any of these a steal?",
+                  "Find similar cars like my saved ones"
+                ] : [
+                  "Analyze my watchlist",
+                  "Is $15k a good price for a 2018 Camry in Seattle?",
+                  "Find me some quick arbitrage flips"
+                ]).map((prompt, i) => (
+                  <button
+                    key={i}
+                    onClick={(e) => { e.preventDefault(); setChatInput(prompt); setTimeout(() => document.getElementById('chat-submit-btn').click(), 50); }}
+                    className="whitespace-nowrap px-4 py-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 text-sm transition-all shadow-lg"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
             <form onSubmit={handleSendMessage} className="max-w-6xl mx-auto px-0 md:px-6">
               <div className="relative flex items-center">
                 <input
@@ -1468,6 +1519,7 @@ function App() {
                   className="w-full bg-[#151620]/90 backdrop-blur-xl hover:bg-[#1a1b26]/90 focus:bg-[#1a1b26]/90 border border-white/[0.08] focus:border-indigo-500/50 text-white text-[15px] rounded-2xl py-4 pl-6 pr-14 focus:outline-none transition-all placeholder:text-gray-500 shadow-2xl"
                 />
                 <button 
+                  id="chat-submit-btn"
                   type="submit" 
                   disabled={!chatInput.trim() || isChatLoading}
                   className="absolute right-2 w-10 h-10 bg-indigo-600 hover:bg-indigo-500 rounded-xl flex items-center justify-center text-white transition-all disabled:opacity-30 disabled:bg-white/10"

@@ -24,20 +24,49 @@ cat_cols = ['condition', 'title_status', 'trim', 'cylinders', 'drive', 'fuel', '
 for col in cat_cols:
     df[col] = df[col].fillna('unspecified')
 
+# Extract Trim Tiers if Trim is unspecified
+def extract_trim_tier(name):
+    if pd.isna(name): return 'base'
+    name = str(name).lower()
+    
+    # Performance / Luxury
+    if any(k in name for k in ['type r', 'type-r', 'trd', 'amg', 'm3', 'm4', 'm5', 'srt', 'hellcat', 'platinum', 'limited', 'touring', 'grand touring', 'premium', 'denali', 'autobiography']):
+        return 'high_performance_luxury'
+    
+    # High / Mid-High
+    if any(k in name for k in ['ex-l', 'xle', 'xls', 'ltz', 'sl', 'sle', 'slt', 'titanium', 'lariat', 'king ranch', 'rubicon', 'sahara']):
+        return 'high'
+        
+    # Mid
+    if any(k in name for k in ['ex', 'se', 'sv', 'lt', 'sr5', 'sport', 'latitude', 'big horn', 'xlt']):
+        return 'mid'
+        
+    # Base
+    if any(k in name for k in ['lx', 'le', 'ls', 's', 'base', 'xl', 'work']):
+        return 'base'
+        
+    return 'unspecified'
+
+df['trim'] = df.apply(lambda row: extract_trim_tier(row['name']) if row['trim'] == 'unspecified' else row['trim'], axis=1)
+
 # 3. Filter outliers
 df = df[(df['price'] >= 800) & (df['price'] <= 100000)]
 df = df[(df['mileage'] >= 100) & (df['mileage'] <= 300000)]
 df = df.dropna(subset=['name', 'price', 'mileage'])
 
 print(f"Rows before outlier removal: {len(df)}")
+# Calculate age
+current_year = datetime.datetime.now().year
+df['age'] = current_year - df['year']
+
 # 1. Drop extreme classic cars
 df = df[df['age'] <= 30]
 
 # 2. Drop unrealistic junk/parts cars
 df = df[df['price'] >= 2000]
 
-# 3. Drop impossible mileage for the age
-df = df[df['mileage'] <= (df['age'] * 25000)]
+# 3. Drop impossible mileage for the age (clip age to 1 to protect brand new cars)
+df = df[df['mileage'] <= (df['age'].clip(lower=1) * 25000)]
 
 # 4. Advanced IQR Outlier Removal per Make/Model
 Q1 = df.groupby(['make', 'model'])['price'].transform('quantile', 0.25)
@@ -51,21 +80,57 @@ print(f"Rows after outlier removal: {len(df)}")
 # ---
 
 # Calculate Market Baselines to stabilize AI predictions
-print('Calculating market baselines...')
-# 1. Group Average Baseline (Exact market average for Year/Make/Model)
-df['avg_market_price'] = df.groupby(['year', 'make', 'model'])['price'].transform('mean')
-df['avg_make_price'] = df.groupby(['year', 'make'])['price'].transform('mean')
-df['avg_market_price'] = df['avg_market_price'].fillna(df['avg_make_price']).fillna(df['price'].mean())
+print('Calculating market baselines and building robust lookup table...')
 
-# 2. Estimated MSRP Engine (Back-calculate MSRP using age depreciation)
-# Approximating a 10% loss of value per year
+# Create a robust lookup table with interpolated missing years
+current_year = datetime.datetime.now().year
+makes_models = df[['make', 'model']].drop_duplicates()
+years = pd.DataFrame({'year': range(1990, current_year + 2)})  # 1990 to 2027
+
+# Cross join makes_models with years safely
+grid = makes_models.merge(years, how='cross')
+avg_prices = df.groupby(['make', 'model', 'year'])['price'].mean().reset_index()
+avg_prices.rename(columns={'price': 'avg_market_price'}, inplace=True)
+lookup = pd.merge(grid, avg_prices, on=['make', 'model', 'year'], how='left')
+
+def fill_group(grp):
+    grp = grp.sort_values('year')
+    grp['avg_market_price'] = grp['avg_market_price'].interpolate(method='linear')
+    
+    valid = grp.dropna(subset=['avg_market_price'])
+    if not valid.empty:
+        max_year = valid['year'].max()
+        max_price = valid[valid['year'] == max_year]['avg_market_price'].iloc[0]
+        min_year = valid['year'].min()
+        min_price = valid[valid['year'] == min_year]['avg_market_price'].iloc[0]
+        
+        def fill_extrapolate(row):
+            if pd.notna(row['avg_market_price']):
+                return row['avg_market_price']
+            if row['year'] > max_year:
+                return max_price * (1.05 ** (row['year'] - max_year))
+            else:
+                return min_price * (0.94 ** (min_year - row['year']))
+                
+        grp['avg_market_price'] = grp.apply(fill_extrapolate, axis=1)
+    else:
+        grp['avg_market_price'] = 5000
+        
+    grp['avg_market_price'] = grp['avg_market_price'].cummax()
+    return grp
+
+lookup = lookup.groupby(['make', 'model']).apply(fill_group)
+# reset_index will bring make and model back from the MultiIndex
+lookup = lookup.reset_index(level=['make', 'model'])
+lookup = lookup.reset_index(drop=True)
+
+df = pd.merge(df, lookup, on=['make', 'model', 'year'], how='left')
 df['estimated_msrp'] = df['avg_market_price'] * (1 + 0.10 * df['age'])
 
 # Export lookup table for the Live API scraper to use
-lookup = df.groupby(['year', 'make', 'model'])[['avg_market_price']].mean().reset_index()
 os.makedirs('../api', exist_ok=True)
 lookup.to_csv('../api/avg_prices.csv', index=False)
-print('Saved avg_prices.csv lookup table.')
+print('Saved robust avg_prices.csv lookup table.')
 
 # Define Features (X) and Target (y)
 X = df[['age', 'make', 'model', 'trim', 'mileage', 'location', 'condition', 

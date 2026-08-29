@@ -480,6 +480,22 @@ def process_url_task(job_id: str, url: str):
         model_name = specs['model']
         trim = specs['trim']
         
+        def extract_trim_tier(name):
+            if pd.isna(name): return 'base'
+            name = str(name).lower()
+            if any(k in name for k in ['type r', 'type-r', 'trd', 'amg', 'm3', 'm4', 'm5', 'srt', 'hellcat', 'platinum', 'limited', 'touring', 'grand touring', 'premium', 'denali', 'autobiography']):
+                return 'high_performance_luxury'
+            if any(k in name for k in ['ex-l', 'xle', 'xls', 'ltz', 'sl', 'sle', 'slt', 'titanium', 'lariat', 'king ranch', 'rubicon', 'sahara']):
+                return 'high'
+            if any(k in name for k in ['ex', 'se', 'sv', 'lt', 'sr5', 'sport', 'latitude', 'big horn', 'xlt']):
+                return 'mid'
+            if any(k in name for k in ['lx', 'le', 'ls', 's', 'base', 'xl', 'work']):
+                return 'base'
+            return 'unspecified'
+
+        if not trim or trim.lower() == 'unspecified':
+            trim = extract_trim_tier(title_text)
+            
         # 5. Engineer Year/Age
         year_match = re.search(r'\b(19[0-9]{2}|20[0-2][0-9])\b', title_text)
         if not year_match or not make or not model_name or not mileage:
@@ -507,8 +523,18 @@ def process_url_task(job_id: str, url: str):
             input_df = pd.merge(input_df, avg_prices, on=['year', 'make', 'model'], how='left')
             
             make_model_prices = avg_prices[(avg_prices['make'] == make.lower()) & (avg_prices['model'] == model_name.lower())]
+            
+            # Fallback for mismatched models (e.g. "silverado 1500" vs "silverado")
+            if make_model_prices.empty and len(model_name.split()) > 1:
+                first_word = model_name.lower().split()[0]
+                make_model_prices = avg_prices[(avg_prices['make'] == make.lower()) & (avg_prices['model'] == first_word)]
+                if not make_model_prices.empty:
+                    # Update input_df so OneHotEncoder recognizes it!
+                    input_df['model'] = first_word
+
             if not make_model_prices.empty:
-                # Use make+model median across all years as fallback anchor
+                # With our new lookup table, avg_market_price shouldn't be NaN because we interpolated all years
+                # But just in case, use the same interpolation fallback
                 median_price = make_model_prices['avg_market_price'].median()
                 
                 def fill_price(row):
@@ -947,6 +973,20 @@ def get_depreciation_curve(make: str, model_name: str):
     import datetime
     current_year = datetime.datetime.now().year
     
+    make = make.lower()
+    model_name = model_name.lower()
+    
+    # Fallback for mismatched models (e.g. "silverado 1500" vs "silverado")
+    try:
+        avg_prices = pd.read_csv('api/avg_prices.csv')
+        make_model_prices = avg_prices[(avg_prices['make'] == make) & (avg_prices['model'] == model_name)]
+        if make_model_prices.empty and len(model_name.split()) > 1:
+            first_word = model_name.split()[0]
+            if not avg_prices[(avg_prices['make'] == make) & (avg_prices['model'] == first_word)].empty:
+                model_name = first_word
+    except Exception as e:
+        print("Error checking avg_prices for fallback:", e)
+
     # Dynamically find the minimum year for this specific make/model to bound the chart
     start_year = 2005
     if db_engine:
@@ -1260,6 +1300,47 @@ def chat_with_agent(req: ChatRequest):
                     "required": ["make", "model"]
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "analyze_watchlist",
+                "description": "Read the user's saved cars (watchlist) to find out what they like. Use this if the user asks for cars similar to their saved ones.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {}
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "add_to_watchlist",
+                "description": "Add a specific car to the user's watchlist.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "car_url": {"type": "string", "description": "The exact URL of the car to save."}
+                    },
+                    "required": ["car_url"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "market_analysis",
+                "description": "Calculate the average market price of a specific make and model in a region.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "make": {"type": "string", "description": "Car make, e.g., 'toyota'"},
+                        "model": {"type": "string", "description": "Car model, e.g., 'camry'"},
+                        "location": {"type": "string", "description": "City or region, e.g., 'sfbay'"}
+                    },
+                    "required": ["make", "model"]
+                }
+            }
         }
     ]
     
@@ -1464,6 +1545,62 @@ def chat_with_agent(req: ChatRequest):
                     "model": function_args.get("model")
                 }
                 tool_response = f"Successfully navigated user to insights for {function_args.get('make')} {function_args.get('model')}."
+                
+            elif function_name == "analyze_watchlist":
+                if not req.user_id:
+                    tool_response = "Error: You must be logged in to analyze your watchlist."
+                else:
+                    try:
+                        with db_engine.connect() as conn:
+                            query = """
+                            SELECT c.year, c.make, c.model, c.price 
+                            FROM cars c 
+                            JOIN watchlist w ON c.url = w.car_url 
+                            WHERE w.user_id = :uid 
+                            LIMIT 10
+                            """
+                            res = conn.execute(text(query), {"uid": req.user_id}).fetchall()
+                            if not res:
+                                tool_response = "User has no saved cars."
+                            else:
+                                saved_cars = [f"{r[0]} {r[1]} {r[2]} (${r[3]})" for r in res]
+                                tool_response = f"User's saved cars:\n" + "\n".join(saved_cars) + "\n\nYou should now use `search_cars` to find similar live deals for the user."
+                    except Exception as e:
+                        tool_response = f"Database error: {str(e)}"
+                        
+            elif function_name == "add_to_watchlist":
+                if not req.user_id:
+                    tool_response = "Error: You must be logged in to save cars."
+                else:
+                    try:
+                        with db_engine.begin() as conn:
+                            conn.execute(text("""
+                                INSERT INTO watchlist (user_id, car_url) 
+                                VALUES (:uid, :url) 
+                                ON CONFLICT DO NOTHING
+                            """), {"uid": req.user_id, "url": function_args.get('car_url')})
+                        tool_response = "Successfully saved car to the user's watchlist!"
+                    except Exception as e:
+                        tool_response = f"Failed to save to watchlist: {str(e)}"
+                        
+            elif function_name == "market_analysis":
+                try:
+                    with db_engine.connect() as conn:
+                        query = "SELECT AVG(price) as avg_price, COUNT(*) as cnt FROM cars WHERE make = :make AND model = :model"
+                        params = {"make": function_args.get('make', '').lower(), "model": function_args.get('model', '').lower()}
+                        
+                        if 'location' in function_args:
+                            query += " AND region = :location"
+                            params['location'] = function_args.get('location', '').lower()
+                            
+                        res = conn.execute(text(query), params).fetchone()
+                        
+                        if res and res[1] > 0:
+                            tool_response = f"Analyzed {res[1]} {function_args.get('make')} {function_args.get('model')}s. The average price is ${int(res[0]):,}."
+                        else:
+                            tool_response = "Not enough data to calculate an average price for that specific request."
+                except Exception as e:
+                    tool_response = f"Database error: {str(e)}"
             
             messages.append(
                 {
